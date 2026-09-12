@@ -45,6 +45,8 @@ const brakeM = new PedalModel();
 const engine = new Powertrain();
 
 let vehicle, loop, hud, sun, cockpit = false, paused = false;
+let tiempoVolcado = 0;
+const TIEMPO_VUELCO = 2.5;   // segundos boca arriba antes de reponer
 let tel = null;
 const camPos = new THREE.Vector3(0, 4, -10);
 const camAim = new THREE.Vector3();
@@ -132,7 +134,17 @@ function simular(dt, world) {
   };
 
   // --- recuperacion automatica -------------------------------------------
-  if (vehicle.body.translation().y < -20) reiniciar();
+  if (vehicle.body.translation().y < -20) { reiniciar(); return; }
+
+  // Volcado: un coche boca arriba no se endereza solo. Se le da un margen
+  // para que el jugador vea lo que ha pasado y luego se le devuelve a la via.
+  if (tel.upsideDown && vehicle.speedKmh < 8) {
+    tiempoVolcado += dt;
+    tel.recuperandoEn = Math.max(0, TIEMPO_VUELCO - tiempoVolcado);
+    if (tiempoVolcado >= TIEMPO_VUELCO) reiniciar();
+  } else {
+    tiempoVolcado = 0;
+  }
 }
 
 // --------------------------------------------------------------- presentar
@@ -183,6 +195,7 @@ function actualizarCamara(dt) {
 /** Reinicia TODO el estado, no solo el cuerpo rigido. */
 function reiniciar() {
   vehicle.respawn(SPAWN, 0);
+  tiempoVolcado = 0;
   steering.reset();
   throttleM.reset();
   brakeM.reset();

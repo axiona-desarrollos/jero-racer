@@ -76,9 +76,9 @@ export class Hud {
     n.brake.textContent = bar(t.brake) + (t.handbrake ? ' MANO' : '');
     n.diag.textContent = `${diag.fps.toFixed(0)} · ${diag.steps}${diag.dropped ? ' ·' + diag.dropped : ''}`;
 
-    const aviso = t.airborne ? 'EN EL AIRE'
-      : t.upsideDown ? 'VOLCADO — R para reiniciar'
-        : t.analog ? '' : '';
+    const aviso = t.upsideDown
+      ? `VOLCADO — reponiendo en ${(t.recuperandoEn ?? 0).toFixed(1)} s`
+      : t.airborne ? 'EN EL AIRE' : '';
     if (n.aviso.textContent !== aviso) n.aviso.textContent = aviso;
   }
 }

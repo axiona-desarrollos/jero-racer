@@ -183,7 +183,11 @@ export class Vehicle {
       c.setWheelSuspensionStiffness(i, 150.0);
       c.setWheelSuspensionCompression(i, 3.0);
       c.setWheelSuspensionRelaxation(i, 4.0);
-      c.setWheelMaxSuspensionTravel(i, 0.22);
+      // El recorrido NO puede superar la longitud de reposo: si lo hace,
+      // Rapier deja comprimir por debajo de cero (con 0.22 y reposo 0.16
+      // llegaba a -0.06) y la rueda se dibuja DENTRO de la carroceria.
+      // Se deja un tope de goma de 1 cm, como en un coche real.
+      c.setWheelMaxSuspensionTravel(i, rest - 0.01);
       c.setWheelMaxSuspensionForce(i, 60000);
 
       // Asimetria deliberada, igual que HRVehicleWheels.cpp (1400 delante /
@@ -402,11 +406,15 @@ export class Vehicle {
 
     for (let i = 0; i < 4; i++) {
       const conn = c.wheelChassisConnectionPointCs(i);
-      const len = c.wheelSuspensionLength(i);
-      n.wheels[i].pos
-        .set(conn.x, conn.y - (Number.isFinite(len) ? len : 0), conn.z)
-        .applyQuaternion(n.quat)
-        .add(n.pos);
+      // La longitud se acota a [0, reposo]. En golpes fuertes Rapier devuelve
+      // valores NEGATIVOS (hasta -0.06 medido): la rueda se dibuja por encima
+      // de su anclaje, o sea METIDA en la carroceria.
+      const raw = c.wheelSuspensionLength(i);
+      const len = Number.isFinite(raw) ? clamp(raw, 0, this.suspensionRest) : this.suspensionRest;
+      // Se guarda en ESPACIO DE CHASIS, no en mundo. Interpolar posiciones de
+      // mundo hace que la recta corte el arco cuando el coche gira deprisa: en
+      // un vuelco la rueda se despegaba ~4 cm de su sitio.
+      n.wheels[i].pos.set(conn.x, conn.y - len, conn.z);
       n.wheels[i].steer = c.wheelSteering(i);
       n.wheels[i].spin = c.wheelRotation(i);
     }
@@ -421,18 +429,29 @@ export class Vehicle {
     const a = clamp(alpha, 0, 1);
     const p = this.prev, n = this.curr;
 
-    this.bodyRoot.position.lerpVectors(p.pos, n.pos, a);
-    this.bodyRoot.position.y += this.groundOffset;
-    this.bodyRoot.quaternion.slerpQuaternions(p.quat, n.quat, a);
-
+    // UNA sola pose de chasis interpolada. Todo lo demas —carroceria y las
+    // cuatro ruedas— se construye a partir de ella, asi que no pueden
+    // separarse por violento que sea el golpe: van solidarias al mismo cuerpo.
     const bq = this._q.slerpQuaternions(p.quat, n.quat, a);
+    const bpos = this._v2.lerpVectors(p.pos, n.pos, a);
+
+    this.bodyRoot.quaternion.copy(bq);
+    // El origen del cuerpo rigido esta en el plano de contacto; el del modelo,
+    // groundOffset mas arriba. Ese desplazamiento es SOLIDARIO AL COCHE: va en
+    // su eje Y LOCAL. Sumandolo en Y de mundo, al volcar el coche la carroceria
+    // se separaba de las ruedas hasta 32 cm — parecia que se desarmaba.
+    this.bodyRoot.position.copy(bpos)
+      .add(this._v3.set(0, this.groundOffset, 0).applyQuaternion(bq));
+
     for (let i = 0; i < 4; i++) {
       const v = this.visual[i];
-      v.steerG.position.lerpVectors(p.wheels[i].pos, n.wheels[i].pos, a);
+      const pw = p.wheels[i], nw = n.wheels[i];
+      // Las posiciones estan en espacio de chasis: se interpolan ahi y se
+      // llevan a mundo con la MISMA pose que la carroceria.
+      v.steerG.position.lerpVectors(pw.pos, nw.pos, a).applyQuaternion(bq).add(bpos);
       v.steerG.quaternion.copy(bq).multiply(
-        this._q2.setFromAxisAngle(this._up, p.wheels[i].steer +
-          (n.wheels[i].steer - p.wheels[i].steer) * a));
-      v.spinG.rotation.x = -(p.wheels[i].spin + (n.wheels[i].spin - p.wheels[i].spin) * a);
+        this._q2.setFromAxisAngle(this._up, pw.steer + (nw.steer - pw.steer) * a));
+      v.spinG.rotation.x = -(pw.spin + (nw.spin - pw.spin) * a);
     }
 
     if (this.steeringWheel) {
