@@ -86,8 +86,10 @@ async function main() {
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loop.resync(); });
 
-  window.HR = { vehicle, scene, camera, world, RAPIER, steering, engine, input, loop,
-    reiniciar, get telemetria() { return tel; } };
+  window.HR = { vehicle, scene, camera, renderer, world, RAPIER, steering, engine, input, loop,
+    reiniciar, get telemetria() { return tel; },
+    /** Pinta un cuadro suelto con el bucle parado (inspeccion visual). */
+    pintar: () => renderer.render(scene, camera) };
 
   loop.start();
 }

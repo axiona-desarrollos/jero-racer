@@ -85,7 +85,29 @@ export class Vehicle {
       const p = new THREE.Vector3();
       node.getWorldPosition(p);
       const bb = new THREE.Box3().setFromObject(node);
-      this.hubs.push({ name, node, pos: p, radius: (bb.max.y - bb.min.y) * 0.5, bottom: bb.min.y });
+
+      // CarConcept viene con las ruedas DELANTERAS giradas 30 grados de
+      // fabrica: es una pose de render. El eje de las traseras es (1,0,0)
+      // limpio, el de las delanteras (0.866,0,0.5). Si no se quita, la
+      // direccion del juego se suma a esa pose y las ruedas bambolean sobre
+      // un eje torcido en vez de rodar.
+      const restQ = new THREE.Quaternion();
+      node.getWorldQuaternion(restQ);
+      // OJO CON EL SIGNO: una rotacion de +phi sobre Y lleva X a
+      // (cos phi, 0, -sin phi). Con el eje en (0.866, 0, +0.5) el giro de
+      // fabrica es -30 grados, luego hay que SUMAR 30 para deshacerlo.
+      const axle = new THREE.Vector3(1, 0, 0).applyQuaternion(restQ);
+      const bakedYaw = Math.atan2(axle.z, axle.x);
+      const corr = new THREE.Quaternion()
+        .setFromAxisAngle(new THREE.Vector3(0, 1, 0), bakedYaw);
+
+      // La altura del bounding box es el diametro sea cual sea el giro: una
+      // rueda es un solido de revolucion, y girarla en Y o en su propio eje
+      // no cambia su extension vertical.
+      this.hubs.push({
+        name, node, pos: p, corr, bakedYawDeg: THREE.MathUtils.radToDeg(bakedYaw),
+        radius: (bb.max.y - bb.min.y) * 0.5, bottom: bb.min.y,
+      });
     }
 
     this.wheelRadius = this.hubs.reduce((a, h) => a + h.radius, 0) / this.hubs.length;
@@ -191,7 +213,12 @@ export class Vehicle {
       // attach() conserva la transformada en mundo. La pinza va al grupo que
       // NO gira: en un coche real esta fija al buje, no al disco.
       for (const ch of [...hub.node.children]) {
-        (ch === pad ? steerG : spinG).attach(ch);
+        const destino = ch === pad ? steerG : spinG;
+        destino.attach(ch);
+        // Quitar el giro de fabrica: deja el eje del neumatico alineado con
+        // la X del grupo, que es sobre la que rueda.
+        ch.quaternion.premultiply(hub.corr);
+        ch.position.applyQuaternion(hub.corr);
       }
       hub.node.removeFromParent();
       this.visual.push({ steerG, spinG });
