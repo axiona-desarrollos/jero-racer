@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>AXIONA · Candidatos de vehículo</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0e14;overflow:hidden;
+    font-family:Consolas,monospace;color:#e8eef8}
+  #c{display:block;width:100%;height:100%}
+  #hud{position:fixed;left:18px;top:16px;background:rgba(16,27,51,.82);
+    border:1px solid rgba(0,240,192,.35);border-radius:10px;padding:12px 16px;
+    font-size:13px;line-height:1.8;pointer-events:none}
+  #hud b{color:#00f0c0}
+  #name{font-size:19px;color:#00f0c0;letter-spacing:2px;margin-bottom:6px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"><div id="name">—</div><div id="info">cargando…</div></div>
+
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader}      from 'three/addons/loaders/GLTFLoader.js';
+import {OrbitControls}   from 'three/addons/controls/OrbitControls.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+
+const cv = document.getElementById('c');
+const rend = new THREE.WebGLRenderer({canvas:cv, antialias:true});
+rend.setPixelRatio(Math.min(devicePixelRatio,2));
+rend.toneMapping = THREE.ACESFilmicToneMapping;
+rend.toneMappingExposure = 1.05;
+rend.shadowMap.enabled = true;
+rend.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0e14);
+const pmrem = new THREE.PMREMGenerator(rend);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const cam = new THREE.PerspectiveCamera(38, 1, 0.01, 2000);
+const ctl = new OrbitControls(cam, cv);
+ctl.enableDamping = true;
+
+const key = new THREE.DirectionalLight(0xfff1e0, 2.4);
+key.position.set(4, 7, 5); key.castShadow = true;
+key.shadow.mapSize.set(2048,2048);
+const d = 6; Object.assign(key.shadow.camera, {left:-d,right:d,top:d,bottom:-d});
+scene.add(key);
+scene.add(new THREE.DirectionalLight(0x88bbff, 0.8).translateX(-6).translateZ(-4));
+scene.add(new THREE.AmbientLight(0x334466, 0.6));
+
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(200,200),
+  new THREE.MeshStandardMaterial({color:0x11161f, roughness:0.55, metalness:0.0}));
+floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
+
+const loader = new GLTFLoader();
+let current = null, radius = 1, center = new THREE.Vector3();
+
+function frame(preset='iso'){
+  const a = {iso:[1,0.42,1.25], front:[0,0.18,1.6], side:[1.7,0.16,0],
+             rear:[0,0.2,-1.7], top:[0.01,1.9,0.01], low:[1.1,0.10,1.0]}[preset]||[1,0.4,1.2];
+  // en panel vertical hace falta alejarse mas para que quepa a lo ancho
+  const k = 2.85 / Math.min(1, cam.aspect);
+  const v = new THREE.Vector3(...a).normalize().multiplyScalar(radius*k);
+  cam.position.copy(center).add(v);
+  ctl.target.copy(center); ctl.update();
+}
+
+window.API = {
+  load(file){
+    return new Promise((res,rej)=>{
+      loader.load(file, g=>{
+        if(current) scene.remove(current);
+        current = g.scene; scene.add(current);
+
+        const box = new THREE.Box3().setFromObject(current);
+        const size = box.getSize(new THREE.Vector3());
+        box.getCenter(center);
+        // apoyar en el piso y normalizar a ~4.5 m de largo
+        const k = 4.5 / Math.max(size.x,size.y,size.z);
+        current.scale.setScalar(k);
+        const b2 = new THREE.Box3().setFromObject(current);
+        current.position.y -= b2.min.y;
+        b2.setFromObject(current); b2.getCenter(center);
+        radius = b2.getSize(new THREE.Vector3()).length()*0.5;
+
+        let tri=0, vtx=0, mats=new Set();
+        current.traverse(o=>{
+          if(o.isMesh){
+            o.castShadow=o.receiveShadow=true;
+            const g2=o.geometry;
+            tri += (g2.index? g2.index.count : g2.attributes.position.count)/3;
+            vtx += g2.attributes.position.count;
+            (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>mats.add(m.uuid));
+          }
+        });
+        const st = {file, tri:Math.round(tri), vtx,
+          materiales:mats.size,
+          medidas:`${(size.x*k).toFixed(2)} x ${(size.y*k).toFixed(2)} x ${(size.z*k).toFixed(2)} m`};
+        document.getElementById('name').textContent = file.replace('.glb','');
+        document.getElementById('info').innerHTML =
+          `triángulos <b>${st.tri.toLocaleString('es')}</b><br>`+
+          `vértices <b>${st.vtx.toLocaleString('es')}</b><br>`+
+          `materiales <b>${st.materiales}</b><br>`+
+          `medidas <b>${st.medidas}</b>`;
+        frame('iso'); res(st);
+      }, undefined, rej);
+    });
+  },
+  view: frame,
+  wheels(){   // ¿las ruedas son nodos manipulables?
+    if(!current) return [];
+    const out=[];
+    current.traverse(o=>{ if(/wheel|rim|tyre|tire/i.test(o.name)) out.push(o.name); });
+    return out;
+  }
+};
+
+function resize(){
+  const w=innerWidth,h=innerHeight;
+  rend.setSize(w,h,false); cam.aspect=w/h; cam.updateProjectionMatrix();
+}
+addEventListener('resize',resize); resize();
+(function tick(){ requestAnimationFrame(tick); ctl.update(); rend.render(scene,cam); })();
+</script>
+</body>
+</html>

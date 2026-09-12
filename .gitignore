@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.vite/
+*.log
+
+# Binarios grandes: los modelos se descargan con scripts/fetch-models.mjs
+public/models/*.glb
+modelos/*.glb
+
+# Unreal
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+.vs/
+*.sln
+*.VC.db

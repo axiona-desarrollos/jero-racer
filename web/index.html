@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HIGHWAY RACER · Glorieta</title>
+<style>
+  :root{ --neon:#00f0c0; --cyan:#4dd8e6; --ink:#e8eef8; --dim:#7d8aa5; --bg:#0a0e14; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;
+    font-family:Consolas,'IBM Plex Mono',monospace;color:var(--ink)}
+  #c{display:block;width:100%;height:100%}
+
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:15px;color:var(--cyan);letter-spacing:1px;background:var(--bg);z-index:20}
+
+  #hud{position:fixed;left:20px;top:20px;display:none;min-width:290px;
+    background:rgba(12,19,32,.80);border:1px solid rgba(0,240,192,.28);
+    border-radius:12px;padding:14px 18px;font-size:12.5px;line-height:1.75;
+    backdrop-filter:blur(6px)}
+  #hud .big{font-size:42px;font-weight:700;color:var(--neon);line-height:1.05;
+    margin-bottom:8px;letter-spacing:-1px}
+  #hud .big i{font-size:13px;font-style:normal;color:var(--dim);margin-left:5px;letter-spacing:0}
+  #hud .big .g{float:right;font-size:26px;color:var(--ink);
+    border:1px solid rgba(120,175,215,.3);border-radius:7px;padding:0 11px;margin-top:6px}
+  #hud .r{display:flex;justify-content:space-between;gap:16px}
+  #hud .r span{color:var(--dim)}
+  #hud .r b{color:var(--ink);font-weight:600}
+  #hud .r .m{color:var(--cyan);letter-spacing:-1px}
+  #hud .hl b{color:var(--neon)}
+  #hud .dim{opacity:.55;margin-top:6px;border-top:1px solid rgba(120,175,215,.14);padding-top:6px}
+
+  #help{position:fixed;left:20px;bottom:18px;font-size:12px;color:var(--dim);
+    line-height:1.9;background:rgba(12,19,32,.66);border-radius:10px;padding:10px 14px}
+  #help b{color:var(--cyan);font-weight:600}
+  #brand{position:fixed;right:20px;top:20px;font-size:11px;color:var(--dim);
+    letter-spacing:3px;text-align:right}
+  #brand b{color:var(--neon);letter-spacing:4px;display:block;font-size:15px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="boot">iniciando…</div>
+<div id="hud"></div>
+<div id="brand"><b>AXIONA</b>HIGHWAY RACER</div>
+<div id="help">
+  <b>W</b> / <b>↑</b> acelerar &nbsp; <b>S</b> / <b>↓</b> frenar &nbsp;
+  <b>A D</b> / <b>← →</b> volante<br>
+  <b>ESPACIO</b> freno de mano &nbsp; <b>C</b> cámara &nbsp; <b>R</b> reiniciar posición
+</div>
+
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+  "@dimforge/rapier3d-compat":"https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.20.0/dist/rapier.mjs"
+}}
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

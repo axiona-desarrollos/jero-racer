@@ -1,0 +1,25 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.4",
+	"Category": "Racing",
+	"Description": "Highway Racer - simulador de carreras en autopista europea",
+	"Modules": [
+		{
+			"Name": "HighwayRacer",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine",
+				"CoreUObject",
+				"EnhancedInput",
+				"Niagara"
+			]
+		}
+	],
+	"Plugins": [
+		{ "Name": "ChaosVehiclesPlugin", "Enabled": true },
+		{ "Name": "EnhancedInput",       "Enabled": true },
+		{ "Name": "Niagara",             "Enabled": true },
+		{ "Name": "MetaSound",           "Enabled": true }
+	]
+}
