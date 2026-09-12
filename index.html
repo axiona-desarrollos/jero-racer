@@ -8,27 +8,29 @@
   :root{ --neon:#00f0c0; --cyan:#4dd8e6; --ink:#e8eef8; --dim:#7d8aa5; --bg:#0a0e14; }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;
-    font-family:Consolas,'IBM Plex Mono',monospace;color:var(--ink)}
+    font-family:Consolas,'IBM Plex Mono',ui-monospace,monospace;color:var(--ink)}
   #c{display:block;width:100%;height:100%}
 
   #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     font-size:15px;color:var(--cyan);letter-spacing:1px;background:var(--bg);z-index:20}
 
-  #hud{position:fixed;left:20px;top:20px;display:none;min-width:290px;
+  .hud{position:fixed;left:20px;top:20px;min-width:300px;
     background:rgba(12,19,32,.80);border:1px solid rgba(0,240,192,.28);
     border-radius:12px;padding:14px 18px;font-size:12.5px;line-height:1.75;
     backdrop-filter:blur(6px)}
-  #hud .big{font-size:42px;font-weight:700;color:var(--neon);line-height:1.05;
+  .hud .big{font-size:42px;font-weight:700;color:var(--neon);line-height:1.05;
     margin-bottom:8px;letter-spacing:-1px}
-  #hud .big i{font-size:13px;font-style:normal;color:var(--dim);margin-left:5px;letter-spacing:0}
-  #hud .big .g{float:right;font-size:26px;color:var(--ink);
-    border:1px solid rgba(120,175,215,.3);border-radius:7px;padding:0 11px;margin-top:6px}
-  #hud .r{display:flex;justify-content:space-between;gap:16px}
-  #hud .r span{color:var(--dim)}
-  #hud .r b{color:var(--ink);font-weight:600}
-  #hud .r .m{color:var(--cyan);letter-spacing:-1px}
-  #hud .hl b{color:var(--neon)}
-  #hud .dim{opacity:.55;margin-top:6px;border-top:1px solid rgba(120,175,215,.14);padding-top:6px}
+  .hud .big i{font-size:13px;font-style:normal;color:var(--dim);margin-left:5px;letter-spacing:0}
+  .hud .big .g{float:right;font-size:26px;color:var(--ink);
+    border:1px solid rgba(120,175,215,.3);border-radius:7px;padding:0 11px;margin-top:6px;
+    min-width:52px;text-align:center}
+  .hud .r{display:flex;justify-content:space-between;gap:16px}
+  .hud .r span{color:var(--dim)}
+  .hud .r b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+  .hud .r .m{color:var(--cyan);letter-spacing:-1px}
+  .hud .hl b{color:var(--neon)}
+  .hud .dim{opacity:.55;margin-top:6px;border-top:1px solid rgba(120,175,215,.14);padding-top:6px}
+  .hud .aviso{color:#ffb648;font-weight:700;letter-spacing:1px;min-height:1.2em;margin-top:4px}
 
   #help{position:fixed;left:20px;bottom:18px;font-size:12px;color:var(--dim);
     line-height:1.9;background:rgba(12,19,32,.66);border-radius:10px;padding:10px 14px}
@@ -44,18 +46,11 @@
 <div id="hud"></div>
 <div id="brand"><b>AXIONA</b>HIGHWAY RACER</div>
 <div id="help">
-  <b>W</b> / <b>↑</b> acelerar &nbsp; <b>S</b> / <b>↓</b> frenar &nbsp;
+  <b>W</b> / <b>↑</b> acelerar &nbsp; <b>S</b> / <b>↓</b> frenar · marcha atrás &nbsp;
   <b>A D</b> / <b>← →</b> volante<br>
-  <b>ESPACIO</b> freno de mano &nbsp; <b>C</b> cámara &nbsp; <b>R</b> reiniciar posición
+  <b>ESPACIO</b> freno de mano &nbsp; <b>C</b> cámara &nbsp; <b>R</b> reiniciar &nbsp;
+  <b>ESC</b> pausa &nbsp;·&nbsp; mando compatible
 </div>
-
-<script type="importmap">
-{"imports":{
-  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-  "@dimforge/rapier3d-compat":"https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.20.0/dist/rapier.mjs"
-}}
-</script>
-<script type="module" src="./src/main.js"></script>
+<script type="module" src="/src/main.js"></script>
 </body>
 </html>
