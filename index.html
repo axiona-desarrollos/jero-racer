@@ -7,6 +7,15 @@
 <style>
   :root{ --neon:#00f0c0; --cyan:#4dd8e6; --ink:#e8eef8; --dim:#7d8aa5; --bg:#0a0e14; }
   *{box-sizing:border-box}
+
+  /* El atributo `hidden` se implementa con `[hidden]{display:none}` en la hoja
+     del NAVEGADOR, y cualquier regla de autor que fije `display` la vence — el
+     estilo de autor siempre gana al del user-agent. `.cartel{display:flex}`
+     dejaba el cartel de choque visible SIEMPRE: una capa a pantalla completa
+     con fondo oscuro y `backdrop-filter: blur(3px)` sobre todo el juego. De ahi
+     venia que se viera oscuro y borroso, HUD incluido, mientras el navegador se
+     veia nitido. Esta linea hace que `hidden` signifique lo que dice. */
+  [hidden]{display:none!important}
   html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;
     font-family:Consolas,'IBM Plex Mono',ui-monospace,monospace;color:var(--ink)}
   #c{display:block;width:100%;height:100%}
