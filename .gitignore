@@ -15,3 +15,8 @@ DerivedDataCache/
 .vs/
 *.sln
 *.VC.db
+
+# Claves: nunca al repositorio
+.env
+.env.local
+.env.*.local

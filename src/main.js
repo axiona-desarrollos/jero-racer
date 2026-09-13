@@ -14,6 +14,7 @@ import { SteeringModel, PedalModel, clamp, lerp } from './vehicle/steering.js';
 import { Powertrain } from './vehicle/powertrain.js';
 import { Vehicle } from './vehicle/vehicle.js';
 import { buildRoundabout, buildLighting, GEO } from './world/roundabout.js';
+import { CiudadFotorrealista, construirCalzadaOSM } from './world/photoreal.js';
 import { FixedLoop } from './core/loop.js';
 import { Input } from './core/input.js';
 import { Hud } from './ui/hud.js';
@@ -21,6 +22,11 @@ import { EngineAudio } from './audio/engine.js';
 import { VehicleFX } from './vfx/vehicle-fx.js';
 
 const STEP = 1 / 60;
+
+// ?escena=pilsen  -> Medellin fotorrealista sobre la Glorieta Pilsen
+// (por defecto)   -> glorieta procedural, gratis e ilimitada
+const ESCENA = new URLSearchParams(location.search).get('escena') ?? 'proc';
+const CLAVE_TILES = import.meta.env.VITE_GOOGLE_3D_TILES_KEY ?? '';
 const SPAWN = new THREE.Vector3(0, 0.06, GEO.islandR + 4.5);
 const $ = s => document.querySelector(s);
 const boot = t => { const e = $('#boot'); if (e) e.textContent = t; };
@@ -47,7 +53,7 @@ const brakeM = new PedalModel();
 const engine = new Powertrain();
 const audio = new EngineAudio();
 
-let vehicle, loop, hud, sun, fx, cockpit = false, paused = false;
+let vehicle, loop, hud, sun, fx, ciudad = null, cockpit = false, paused = false;
 let tiempoVolcado = 0;
 const TIEMPO_VUELCO = 2.5;   // segundos boca arriba antes de reponer
 let tel = null;
@@ -65,11 +71,21 @@ async function main() {
   world.timestep = STEP;
   world.integrationParameters.numSolverIterations = 8;
 
-  boot('Construyendo la glorieta…');
   sun = buildLighting(scene, renderer);
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  buildRoundabout(scene, RAPIER, world);
+
+  let spawn = SPAWN;
+  if (ESCENA === 'pilsen' && CLAVE_TILES) {
+    spawn = await montarMedellin(world);
+  } else {
+    if (ESCENA === 'pilsen') {
+      boot('Falta VITE_GOOGLE_3D_TILES_KEY en .env.local — usando la glorieta procedural');
+      await new Promise(r => setTimeout(r, 2200));
+    }
+    boot('Construyendo la glorieta…');
+    buildRoundabout(scene, RAPIER, world);
+  }
 
   boot('Cargando CarConcept…');
   const gltf = await new GLTFLoader().loadAsync(
@@ -77,7 +93,8 @@ async function main() {
   gltf.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   scene.add(gltf.scene);
 
-  vehicle = new Vehicle(RAPIER, world, gltf.scene, { spawn: SPAWN });
+  vehicle = new Vehicle(RAPIER, world, gltf.scene, { spawn });
+  SPAWN.copy(spawn);
   fx = new VehicleFX(scene, vehicle);
 
   // El navegador exige un gesto del usuario para dejar sonar audio.
@@ -92,17 +109,62 @@ async function main() {
   loop = new FixedLoop({
     step: STEP, maxSteps: 6, maxFrame: 0.1,
     fixed: dt => { if (!paused) simular(dt, world); },
-    render: (alpha, dt) => presentar(alpha, dt),
+    render: (alpha, dt) => { if (ciudad) ciudad.update(); presentar(alpha, dt); },
   });
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loop.resync(); });
 
-  window.HR = { vehicle, scene, camera, renderer, world, RAPIER, steering, engine, input, loop, audio, fx,
+  window.HR = { vehicle, scene, camera, renderer, world, RAPIER, steering, engine, input, loop, audio, fx, ciudad,
     reiniciar, get telemetria() { return tel; },
     /** Pinta un cuadro suelto con el bucle parado (inspeccion visual). */
     pintar: () => renderer.render(scene, camera) };
 
   loop.start();
+}
+
+/**
+ * Monta Medellin fotorrealista y devuelve el punto de aparicion del coche.
+ * Espera a que las teselas den una altura de suelo REAL antes de construir
+ * los colisionadores: adivinarla deja el coche flotando o enterrado.
+ */
+async function montarMedellin(world) {
+  boot('Cargando la Glorieta Pilsen…');
+  const pista = await fetch(import.meta.env.BASE_URL + 'data/glorieta-pilsen.json')
+    .then(r => r.json());
+
+  boot('Conectando con Google Photorealistic 3D Tiles…');
+  ciudad = new CiudadFotorrealista(scene, camera, renderer, pista, CLAVE_TILES);
+  ciudad.onAtribucion = txt => { const e = $('#atrib'); if (e) e.textContent = txt; };
+
+  // La camara tiene que estar donde estara el coche o las teselas de esa zona
+  // no se piden: el streaming es por error de pantalla, no por proximidad.
+  camera.position.set(0, 60, 90);
+  camera.lookAt(0, 0, 0);
+
+  const t0 = performance.now();
+  while (!ciudad.listo) {
+    ciudad.update();
+    renderer.render(scene, camera);
+    boot(`Descargando Medellín… ${ciudad.cargando} teselas`);
+    await new Promise(r => requestAnimationFrame(r));
+    if (performance.now() - t0 > 30000) {
+      boot('Las teselas tardan demasiado. Revisa la clave y la facturación.');
+      await new Promise(r => setTimeout(r, 3000));
+      break;
+    }
+  }
+
+  const y = ciudad.alturaSuelo ?? 0;
+  const calz = construirCalzadaOSM(scene, RAPIER, world, pista, y);
+  // El sol del escenario procedural estorba aqui: la fotogrametria ya viene
+  // con su iluminacion horneada. Se baja a relleno suave.
+  sun.intensity = 0.55;
+  scene.fog = null;
+  scene.background = new THREE.Color(0x0a0e14);
+
+  boot('');
+  // Aparecer en la calzada, no en la isleta.
+  return new THREE.Vector3(0, y + 0.30, calz.radioEje);
 }
 
 // ------------------------------------------------------------------ fisica

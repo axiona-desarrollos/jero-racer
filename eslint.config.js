@@ -9,7 +9,9 @@ export default [
         cancelAnimationFrame:'readonly', addEventListener:'readonly',
         devicePixelRatio:'readonly', innerWidth:'readonly', innerHeight:'readonly',
         console:'readonly', fetch:'readonly', Buffer:'readonly', process:'readonly',
-        __dirname:'readonly' },
+        __dirname:'readonly', URLSearchParams:'readonly', location:'readonly',
+        setTimeout:'readonly', clearTimeout:'readonly', setInterval:'readonly',
+        clearInterval:'readonly', KeyboardEvent:'readonly', Event:'readonly' },
     },
     rules: {
       'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],

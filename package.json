@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
+    "3d-tiles-renderer": "^0.5.2",
     "three": "^0.170.0"
   },
   "devDependencies": {

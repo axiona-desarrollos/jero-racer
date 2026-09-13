@@ -38,6 +38,13 @@
   #brand{position:fixed;right:20px;top:20px;font-size:11px;color:var(--dim);
     letter-spacing:3px;text-align:right}
   #brand b{color:var(--neon);letter-spacing:4px;display:block;font-size:15px}
+
+  /* Google exige mostrar la atribucion de las fuentes de las teselas visibles. */
+  #atribBar{position:fixed;right:20px;bottom:16px;max-width:46vw;text-align:right;
+    font-size:10.5px;line-height:1.6;color:rgba(232,238,248,.62);
+    text-shadow:0 1px 3px rgba(0,0,0,.9);pointer-events:none}
+  #atribBar span{display:block}
+  #atribBar #osm{color:rgba(232,238,248,.42)}
 </style>
 </head>
 <body>
@@ -45,6 +52,7 @@
 <div id="boot">iniciando…</div>
 <div id="hud"></div>
 <div id="brand"><b>AXIONA</b>HIGHWAY RACER</div>
+<div id="atribBar"><span id="atrib"></span><span id="osm">Trazado © colaboradores de OpenStreetMap</span></div>
 <div id="help">
   <b>W</b> / <b>↑</b> acelerar &nbsp; <b>S</b> / <b>↓</b> frenar · marcha atrás &nbsp;
   <b>A D</b> / <b>← →</b> volante<br>
