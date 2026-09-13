@@ -59,8 +59,36 @@ export function carrilX(i) {
  */
 const TRAMO = 12;          // metros de via que representa la textura a lo alto
 const RAYA = 3;            // metros de raya pintada
+
+/**
+ * Ruido de valor con interpolacion suave.
+ *
+ * NO es un capricho frente a Math.random() por pixel. Un ruido blanco puro
+ * tiene detalle a la frecuencia mas alta posible, que es justo la que el
+ * muestreo no puede reproducir: de cerca se ve como grano de television — eso
+ * es lo que se lee como "pixelado" — y de lejos los mipmaps lo promedian a un
+ * gris plano, asi que ni siquiera aporta a distancia. Un ruido con correlacion
+ * espacial da piedra de arido de verdad y sobrevive al filtrado.
+ */
+function ruidoValor(x, y, escala) {
+  const xi = Math.floor(x / escala), yi = Math.floor(y / escala);
+  const tx = (x / escala) - xi, ty = (y / escala) - yi;
+  const hash = (a, b) => {
+    const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  const suave = t => t * t * (3 - 2 * t);
+  const sx = suave(tx), sy = suave(ty);
+  const a = hash(xi, yi), b = hash(xi + 1, yi);
+  const c2 = hash(xi, yi + 1), d2 = hash(xi + 1, yi + 1);
+  return (a * (1 - sx) + b * sx) * (1 - sy) + (c2 * (1 - sx) + d2 * sx) * sy;
+}
+
 function texturaFirme() {
-  const W = 1024, H = 256;
+  // 2048x1024 sobre 27,2 x 12 m son ~13 mm por texel a lo ancho y ~12 a lo
+  // largo. Con los 1024x256 de antes eran 27 y 47 mm: de dos a cinco
+  // centimetros por texel en la superficie que el jugador mira todo el rato.
+  const W = 2048, H = 1024;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const g = c.getContext('2d');
@@ -68,26 +96,45 @@ function texturaFirme() {
   const total = anchoTotal();
   const aPx = m => (m / total) * W;          // metros -> pixeles a lo ancho
 
-  g.fillStyle = '#2b2d31';
+  g.fillStyle = '#3d3d3b';
   g.fillRect(0, 0, W, H);
 
-  // Grano del asfalto: sin esto la calzada es un plano plano y a 200 km/h no
-  // se percibe velocidad ninguna porque no hay nada que se mueva en la textura.
+  // Arido a dos escalas: la gruesa da las manchas de desgaste del firme, la
+  // fina la piedra. Las dos con correlacion espacial, no ruido blanco.
   const img = g.getImageData(0, 0, W, H);
   const d = img.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const n = (Math.random() - 0.5) * 26;
-    d[i] += n; d[i + 1] += n; d[i + 2] += n;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const grueso = (ruidoValor(x, y, 46) - 0.5) * 15;
+      const fino = (ruidoValor(x, y, 2.6) - 0.5) * 26;
+      const n = grueso + fino;
+      d[i] = Math.max(0, Math.min(255, d[i] + n));
+      d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + n));
+      d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + n));
+    }
   }
   g.putImageData(img, 0, 0);
+
+  // Rodadas: dos franjas mas oscuras y pulidas por carril, donde pasan las
+  // ruedas. Es lo que hace que una calzada parezca usada y no recien pintada.
+  const xCal = aPx(VIA.anchoArcen);
+  const wCarril = aPx(VIA.anchoCarril);
+  g.fillStyle = 'rgba(0,0,0,0.13)';
+  for (let i = 0; i < VIA.carriles; i++) {
+    const centro = xCal + wCarril * (i + 0.5);
+    for (const s of [-1, 1]) {
+      g.fillRect(centro + s * aPx(0.82) - aPx(0.24), 0, aPx(0.48), H);
+    }
+  }
 
   // Arcenes, un punto mas oscuros que la calzada.
   g.fillStyle = 'rgba(0,0,0,0.22)';
   g.fillRect(0, 0, aPx(VIA.anchoArcen), H);
   g.fillRect(W - aPx(VIA.anchoArcen), 0, aPx(VIA.anchoArcen), H);
 
-  const xCalzada = aPx(VIA.anchoArcen);
-  const anchoCarrilPx = aPx(VIA.anchoCarril);
+  const xCalzada = xCal;
+  const anchoCarrilPx = wCarril;
 
   // Lineas continuas del borde de calzada.
   g.fillStyle = '#e9e6dd';
@@ -106,7 +153,6 @@ function texturaFirme() {
   t.wrapS = THREE.ClampToEdgeWrapping;
   t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 16;
   return t;
 }
 
@@ -143,10 +189,10 @@ export class Autopista {
 
     // --- dibujo: cinta reciclable -------------------------------------------
     const tex = texturaFirme();
-    if (renderer) tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    tex.anisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 16;
     tex.repeat.set(1, L / TRAMO);
     const matFirme = new THREE.MeshStandardMaterial({
-      map: tex, roughness: 0.92, metalness: 0.0,
+      map: tex, roughness: 0.88, metalness: 0.0,
     });
     const geoFirme = new THREE.PlaneGeometry(total, L);
     geoFirme.rotateX(-Math.PI / 2);

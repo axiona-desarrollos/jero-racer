@@ -31,6 +31,7 @@
    ========================================================================== */
 
 import * as THREE from 'three';
+import { afinarTexturas } from '../core/texturas.js';
 import { TilesRenderer } from '3d-tiles-renderer';
 import {
   GoogleCloudAuthPlugin, ReorientationPlugin,
@@ -174,21 +175,7 @@ export class CiudadFotorrealista {
     //    anisotropia NO hace nada sin mipmaps, que venian desactivados, asi que
     //    hay que activar las dos cosas o no se nota ninguna.
     const anisotropia = Math.min(calidad.anisotropia, renderer.capabilities.getMaxAnisotropy());
-    this._afinarTexturas = raiz => {
-      raiz.traverse(o => {
-        const m = o.material;
-        if (!m) return;
-        for (const clave of ['map', 'normalMap', 'emissiveMap']) {
-          const t = m[clave];
-          if (!t || t.__afinada) continue;
-          t.generateMipmaps = true;
-          t.minFilter = THREE.LinearMipmapLinearFilter;
-          t.anisotropy = anisotropia;
-          t.needsUpdate = true;
-          t.__afinada = true;
-        }
-      });
-    };
+    this._afinarTexturas = raiz => afinarTexturas(raiz, anisotropia);
     tiles.addEventListener('load-model', ({ scene: malla }) => {
       if (malla) this._afinarTexturas(malla);
     });

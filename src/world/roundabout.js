@@ -138,6 +138,11 @@ export function buildLighting(scene, renderer) {
   scene.add(sun);
   scene.add(sun.target);
 
-  scene.add(new THREE.HemisphereLight(0x9fc4ff, 0x2a2318, 0.75));
+  // Nombrada para que una escena con cielo real pueda bajarla: cuando hay un
+  // scene.environment de verdad, esta luz DUPLICA el ambiente y ademas tine de
+  // azul todo lo horizontal, que es casi todo el asfalto.
+  const hemi = new THREE.HemisphereLight(0x9fc4ff, 0x2a2318, 0.75);
+  hemi.name = 'hemisferica';
+  scene.add(hemi);
   return sun;
 }

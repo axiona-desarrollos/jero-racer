@@ -23,6 +23,7 @@ import { Autopista } from './world/autopista.js';
 import { Trafico } from './traffic/trafico.js';
 import { Carrera, ESTADO } from './game/carrera.js';
 import { Marcador } from './ui/marcador.js';
+import { afinarTexturas } from './core/texturas.js';
 import { DirectorCamara } from './camera/director.js';
 import { modosPorDefecto } from './camera/modos.js';
 import { FixedLoop } from './core/loop.js';
@@ -76,6 +77,10 @@ function resize() {
   // descarga Medellin entera y no vuelve sola aunque se restaure la ventana.
   const ancho = Math.max(1, innerWidth);
   const alto = Math.max(1, innerHeight);
+  // El ratio se refresca AQUI y no solo al arrancar: arrastrar la ventana a un
+  // monitor con otra densidad cambia devicePixelRatio, y si el lienzo se queda
+  // con el viejo el navegador reescala la imagen y todo se ve emborronado.
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(ancho, alto, false);
   camera.aspect = ancho / alto;
   camera.updateProjectionMatrix();
@@ -131,7 +136,13 @@ async function main() {
       intensidadFondo: 0.30, intensidadEntorno: 0.65,
     });
     DIR_SOL.copy(cielo.direccionSol);
-    alinearSol(sun, cielo.direccionSol, { distancia: DIST_SOL, intensidad: 2.9 });
+    alinearSol(sun, cielo.direccionSol, { distancia: DIST_SOL, intensidad: 3.6 });
+    // El cielo ya ilumina de ambiente a traves de scene.environment. Dejar
+    // ademas la hemisferica a 0,75 sumaba un segundo ambiente AZUL sobre todo
+    // lo horizontal: medido, el asfalto salia (21,35,52), con el azul a 2,5
+    // veces el rojo — mas luz de luna que mediodia.
+    const hemi = scene.getObjectByName('hemisferica');
+    if (hemi) { hemi.intensity = 0.18; hemi.color.setHex(0xdfe6ef); }
     // La niebla tiene que morir en el color del horizonte o se ve un telon gris
     // recortado contra el cielo al final de la recta.
     scene.fog = new THREE.Fog(0x9fb4c6, 420, 1900);
@@ -157,6 +168,11 @@ async function main() {
   const gltf = await new GLTFLoader().loadAsync(
     import.meta.env.BASE_URL + 'models/CarConcept.glb');
   gltf.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  // El GLB trae sus diez texturas con anisotropia 1, porque el cargador no sabe
+  // que GPU hay debajo. Desde la camara de persecucion la carroceria se ve
+  // SIEMPRE en angulo, que es justo el caso que sin esto se deshace.
+  const afinadas = afinarTexturas(gltf.scene, renderer.capabilities.getMaxAnisotropy());
+  console.info('[coche] texturas afinadas:', afinadas);
   scene.add(gltf.scene);
 
   vehicle = new Vehicle(RAPIER, world, gltf.scene, { spawn });
