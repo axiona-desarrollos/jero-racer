@@ -55,6 +55,18 @@ export class Hud {
 
     this.n.aviso = el('div', 'aviso');
     root.appendChild(this.n.aviso);
+
+    // Nombre de la camara activa. Va en su propio nodo y no en `aviso` porque
+    // ese se reescribe entero en cada refresco y se comeria el mensaje.
+    this.n.camara = el('div', 'camara');
+    root.appendChild(this.n.camara);
+    this.camaraHasta = 0;
+  }
+
+  /** Muestra el modo de camara durante un momento. @param {string} etiqueta */
+  avisarCamara(etiqueta) {
+    this.n.camara.textContent = etiqueta;
+    this.camaraHasta = performance.now() + 1400;
   }
 
   /** @param {object} t telemetria @param {number} dt segundos reales */
@@ -80,6 +92,11 @@ export class Hud {
       ? `VOLCADO — reponiendo en ${(t.recuperandoEn ?? 0).toFixed(1)} s`
       : t.airborne ? 'EN EL AIRE' : '';
     if (n.aviso.textContent !== aviso) n.aviso.textContent = aviso;
+
+    if (this.camaraHasta && performance.now() > this.camaraHasta) {
+      this.camaraHasta = 0;
+      n.camara.textContent = '';
+    }
   }
 }
 

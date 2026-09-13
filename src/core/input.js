@@ -33,6 +33,7 @@ export const DEFAULT_BINDINGS = Object.freeze({
   respawn: ['KeyR'],
   pause: ['Escape', 'KeyP'],
   mute: ['KeyM'],
+  hud: ['KeyH'],
 });
 
 export class Input {

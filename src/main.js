@@ -10,7 +10,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
-import { SteeringModel, PedalModel, clamp, lerp } from './vehicle/steering.js';
+import { SteeringModel, PedalModel } from './vehicle/steering.js';
 import { Powertrain } from './vehicle/powertrain.js';
 import { Vehicle } from './vehicle/vehicle.js';
 import { buildRoundabout, buildLighting, GEO } from './world/roundabout.js';
@@ -19,6 +19,8 @@ import {
   muestrearRelieve, suavizarRelieve, alturaEnRelieve,
 } from './world/photoreal.js';
 import { instalarCielo, alinearSol } from './world/cielo.js';
+import { DirectorCamara } from './camera/director.js';
+import { modosPorDefecto } from './camera/modos.js';
 import { FixedLoop } from './core/loop.js';
 import { Input } from './core/input.js';
 import { Hud } from './ui/hud.js';
@@ -76,7 +78,10 @@ const brakeM = new PedalModel();
 const engine = new Powertrain();
 const audio = new EngineAudio();
 
-let vehicle, loop, hud, sun, fx, ciudad = null, cockpit = false, paused = false;
+let vehicle, loop, hud, sun, fx, director, ciudad = null, paused = false;
+let interfazVisible = true;
+/** Contexto que se le pasa al director; se reutiliza para no asignar por frame. */
+const ctxCamara = { cuerpo: null, velocidadKmh: 0, derrapeGrados: 0, tiempo: 0 };
 let tiempoVolcado = 0;
 const TIEMPO_VUELCO = 2.5;   // segundos boca arriba antes de reponer
 let tel = null;
@@ -86,10 +91,6 @@ let tel = null;
 // del coche apuntaria a un sol distinto del que se ve pintado arriba.
 const DIR_SOL = new THREE.Vector3(28, 38, 18).normalize();
 const DIST_SOL = 50;
-const camPos = new THREE.Vector3(0, 4, -10);
-const camAim = new THREE.Vector3();
-const tmpV = new THREE.Vector3();
-const tmpV2 = new THREE.Vector3();
 
 async function main() {
   boot('Iniciando motor de física…');
@@ -142,6 +143,11 @@ async function main() {
   hud = new Hud($('#hud'));
   resize();
 
+  director = new DirectorCamara(camera, modosPorDefecto());
+  ctxCamara.cuerpo = vehicle.bodyRoot;
+  vehicle.render(1);
+  director.fijar(ctxCamara);
+
   loop = new FixedLoop({
     step: STEP, maxSteps: 6, maxFrame: 0.1,
     fixed: dt => { if (!paused) simular(dt, world); },
@@ -150,7 +156,7 @@ async function main() {
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loop.resync(); });
 
-  window.HR = { vehicle, scene, camera, renderer, world, RAPIER, steering, engine, input, loop, audio, fx, ciudad,
+  window.HR = { vehicle, scene, camera, renderer, world, RAPIER, steering, engine, input, loop, audio, fx, ciudad, director,
     reiniciar, get telemetria() { return tel; },
     /** Pinta un cuadro suelto con el bucle parado (inspeccion visual). */
     pintar: () => renderer.render(scene, camera) };
@@ -278,16 +284,20 @@ function presentar(alpha, dt) {
   vehicle.render(alpha);
 
   if (input.justPressed('respawn')) reiniciar();
-  if (input.justPressed('camera')) cockpit = !cockpit;
+  if (input.justPressed('camera')) { director.siguiente(); hud.avisarCamara(director.etiqueta); }
   if (input.justPressed('pause')) paused = !paused;
   if (input.justPressed('mute')) audio.setEnabled(!audio.enabled);
+  if (input.justPressed('hud')) alternarInterfaz();
 
   if (tel) {
     fx.update(tel, dt);
     audio.update(tel, dt);
   }
 
-  actualizarCamara(dt);
+  ctxCamara.cuerpo = vehicle.bodyRoot;
+  ctxCamara.velocidadKmh = vehicle.speedKmh;
+  ctxCamara.derrapeGrados = tel ? tel.slip : 0;
+  director.actualizar(ctxCamara, dt);
 
   const b = vehicle.bodyRoot.position;
   sun.position.copy(b).addScaledVector(DIR_SOL, DIST_SOL);
@@ -298,30 +308,18 @@ function presentar(alpha, dt) {
   if (tel) hud.update(tel, dt, { fps: loop.fps, steps: loop.lastSteps, dropped: loop.dropped });
 }
 
-function actualizarCamara(dt) {
-  const b = vehicle.bodyRoot;
-  const t = clamp(vehicle.speedKmh / 260, 0, 1);
-
-  if (cockpit) {
-    tmpV.set(0.38, 1.02, 0.15).applyQuaternion(b.quaternion);
-    camera.position.copy(b.position).add(tmpV);
-    tmpV2.set(0, 0.95, 8).applyQuaternion(b.quaternion).add(b.position);
-    camera.lookAt(tmpV2);
-    if (camera.fov !== 72) { camera.fov = 72; camera.updateProjectionMatrix(); }
-    return;
+/**
+ * Oculta o muestra la interfaz para grabar.
+ *
+ * OJO: la barra de atribucion NO se toca. Mostrar la procedencia de las teselas
+ * es una condicion de la licencia de Google, no un adorno del HUD.
+ */
+function alternarInterfaz() {
+  interfazVisible = !interfazVisible;
+  for (const sel of ['#hud', '#help', '#brand']) {
+    const el = $(sel);
+    if (el) el.style.display = interfazVisible ? '' : 'none';
   }
-
-  // El brazo se estira con la velocidad: da sensacion de aceleracion.
-  const boom = lerp(6.2, 7.8, t);
-  tmpV.set(0, 2.55, -boom).applyQuaternion(b.quaternion).add(b.position);
-  camPos.lerp(tmpV, 1 - Math.pow(0.0016, dt));
-  tmpV2.copy(b.position); tmpV2.y += 0.9;
-  camAim.lerp(tmpV2, 1 - Math.pow(0.0006, dt));
-  camera.position.copy(camPos);
-  camera.lookAt(camAim);
-
-  const fov = lerp(58, 70, t);
-  if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
 }
 
 /** Reinicia TODO el estado, no solo el cuerpo rigido. */
@@ -334,6 +332,15 @@ function reiniciar() {
   brakeM.reset();
   engine.reset();
   if (loop) loop.resync();
+  // Sin esto la camara viaja desde donde se quedo el coche accidentado hasta la
+  // reaparicion, barriendo media ciudad delante del jugador.
+  if (director) {
+    vehicle.render(1);
+    ctxCamara.cuerpo = vehicle.bodyRoot;
+    ctxCamara.velocidadKmh = 0;
+    ctxCamara.derrapeGrados = 0;
+    director.fijar(ctxCamara);
+  }
 }
 
 main().catch(e => {
