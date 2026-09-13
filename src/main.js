@@ -65,8 +65,15 @@ scene.background = new THREE.Color(0x0a0e14);
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, LEJOS);
 
 function resize() {
-  renderer.setSize(innerWidth, innerHeight, false);
-  camera.aspect = innerWidth / innerHeight;
+  // UNA VENTANA DE ALTURA CERO ENVENENA TODO EL MOTOR. Pasa al minimizar, y en
+  // paneles embebidos que se ocultan sin descargar la pagina. Sin la guarda:
+  // aspect = 0/0 = NaN -> matriz de proyeccion NaN -> TODOS los tests de frustum
+  // fallan -> el renderer de teselas no marca ninguna en uso -> la cache
+  // descarga Medellin entera y no vuelve sola aunque se restaure la ventana.
+  const ancho = Math.max(1, innerWidth);
+  const alto = Math.max(1, innerHeight);
+  renderer.setSize(ancho, alto, false);
+  camera.aspect = ancho / alto;
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize);

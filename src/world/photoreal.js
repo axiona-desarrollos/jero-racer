@@ -42,6 +42,31 @@ const GOOGLE_ROOT = 'https://tile.googleapis.com/v1/3dtiles/root.json';
 /** Radio medio de la Tierra para pasar lat/lon a metros locales. */
 const R_TIERRA = 6378137.0;
 
+/**
+ * Calidad de la fotogrametria.
+ *
+ * `errorTarget` son los pixeles de error que se toleran antes de pedir el
+ * siguiente nivel de detalle: cuanto menor, mas nitido y mas se descarga.
+ * `useRecommendedSettings` lo deja en 20, que es el ajuste MAS FLOJO — por
+ * encima incluso del 16 por defecto de la libreria — y sirve para sobrevolar
+ * una ciudad, no para conducir dentro de ella.
+ *
+ * DONDE ESTA EL LIMITE, MEDIDO EN ESTA MAQUINA (1280x720, misma camara):
+ *    20 -> 32 fps ·  518 llamadas ·  147 teselas
+ *    16 -> 31 fps ·  628 llamadas ·  202 teselas
+ *    12 -> 21 fps ·  832 llamadas ·  304 teselas
+ *    10 -> 20 fps ·  972 llamadas ·  374 teselas
+ *     6 -> 11 fps · 1924 llamadas ·  850 teselas
+ * El coste NO son los triangulos (533k a 1M, poco para esta GPU) sino las
+ * LLAMADAS DE DIBUJO: cada tesela es una, y con 6 se pasa de 1.900. Se fija 12,
+ * que duplica el detalle de 20 y deja margen de sobra. Bajar mas exige antes
+ * agrupar teselas en lotes (BatchedTilesPlugin), no subir la GPU.
+ */
+export const CALIDAD_POR_DEFECTO = Object.freeze({
+  errorTarget: 12,
+  anisotropia: 16,
+});
+
 /** Pasa un punto lat/lon a metros en el plano local centrado en `origen`. */
 export function latLonAMetros(lat, lon, origen) {
   const dLat = THREE.MathUtils.degToRad(lat - origen.lat);
@@ -86,7 +111,8 @@ export class CiudadFotorrealista {
    * @param {object} pista  glorieta-pilsen.json ya cargado
    * @param {string} apiKey clave de Google Maps Platform
    */
-  constructor(scene, camera, renderer, pista, apiKey) {
+  constructor(scene, camera, renderer, pista, apiKey, calidad = CALIDAD_POR_DEFECTO) {
+    calidad = { ...CALIDAD_POR_DEFECTO, ...calidad };
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
@@ -132,6 +158,40 @@ export class CiudadFotorrealista {
       if (this.errores.length <= 3) console.error('[medellin] fallo de tesela:', msg);
     });
     tiles.addEventListener('load-tile-set', () => console.info('[medellin] tileset raiz cargado'));
+
+    // --- CALIDAD: los dos diales que hacian que la ciudad pareciera pintada --
+    //
+    // 1. errorTarget es el error admisible en PIXELES de pantalla antes de
+    //    bajar un nivel de detalle. `useRecommendedSettings` lo deja en 20, que
+    //    es el ajuste MAS FLOJO de todos — por encima incluso del 16 por defecto
+    //    de la libreria. A ras de calle eso convierte el asfalto en una mancha.
+    //    Se baja despues de registrar el plugin, que es quien lo sube.
+    tiles.errorTarget = calidad.errorTarget;
+
+    // 2. Sin filtrado anisotropico, una calzada mirada casi de canto se deshace:
+    //    la GPU muestrea el mipmap por el eje corto y promedia medio metro de
+    //    asfalto en un texel. Medido aqui: 0 de 105 texturas lo tenian. Y la
+    //    anisotropia NO hace nada sin mipmaps, que venian desactivados, asi que
+    //    hay que activar las dos cosas o no se nota ninguna.
+    const anisotropia = Math.min(calidad.anisotropia, renderer.capabilities.getMaxAnisotropy());
+    this._afinarTexturas = raiz => {
+      raiz.traverse(o => {
+        const m = o.material;
+        if (!m) return;
+        for (const clave of ['map', 'normalMap', 'emissiveMap']) {
+          const t = m[clave];
+          if (!t || t.__afinada) continue;
+          t.generateMipmaps = true;
+          t.minFilter = THREE.LinearMipmapLinearFilter;
+          t.anisotropy = anisotropia;
+          t.needsUpdate = true;
+          t.__afinada = true;
+        }
+      });
+    };
+    tiles.addEventListener('load-model', ({ scene: malla }) => {
+      if (malla) this._afinarTexturas(malla);
+    });
 
     tiles.setCamera(camera);
     tiles.setResolutionFromRenderer(camera, renderer);
