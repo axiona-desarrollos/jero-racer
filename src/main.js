@@ -18,6 +18,7 @@ import {
   CiudadFotorrealista, construirCalzadaOSM, radioEjeOSM,
   muestrearRelieve, suavizarRelieve, alturaEnRelieve,
 } from './world/photoreal.js';
+import { instalarCielo, alinearSol } from './world/cielo.js';
 import { FixedLoop } from './core/loop.js';
 import { Input } from './core/input.js';
 import { Hud } from './ui/hud.js';
@@ -79,6 +80,12 @@ let vehicle, loop, hud, sun, fx, ciudad = null, cockpit = false, paused = false;
 let tiempoVolcado = 0;
 const TIEMPO_VUELCO = 2.5;   // segundos boca arriba antes de reponer
 let tel = null;
+// El sol persigue al coche para que su sombra siempre este dentro del encuadre
+// de la shadow map, pero su DIRECCION la manda la escena: en Medellin la fija
+// el cielo atmosferico, y si aqui se dejara el offset fijo de antes la sombra
+// del coche apuntaria a un sol distinto del que se ve pintado arriba.
+const DIR_SOL = new THREE.Vector3(28, 38, 18).normalize();
+const DIST_SOL = 50;
 const camPos = new THREE.Vector3(0, 4, -10);
 const camAim = new THREE.Vector3();
 const tmpV = new THREE.Vector3();
@@ -195,11 +202,13 @@ async function montarMedellin(world) {
   });
 
   const calz = construirCalzadaOSM(scene, RAPIER, world, pista, relieve, medida.alturaSuelo);
-  // El sol del escenario procedural estorba aqui: la fotogrametria ya viene
-  // con su iluminacion horneada. Se baja a relleno suave.
-  sun.intensity = 0.55;
+
+  // Cielo real en lugar del vacio negro, y de paso el entorno que refleja el
+  // coche deja de ser un estudio de interior y pasa a ser el cielo de encima.
+  const cielo = instalarCielo(renderer, scene);
+  DIR_SOL.copy(cielo.direccionSol);
+  alinearSol(sun, cielo.direccionSol, { distancia: DIST_SOL });
   scene.fog = null;
-  scene.background = new THREE.Color(0x0a0e14);
 
   boot('');
   // Aparecer en la calzada, no en la isleta, y a la altura que de verdad va a
@@ -281,7 +290,7 @@ function presentar(alpha, dt) {
   actualizarCamara(dt);
 
   const b = vehicle.bodyRoot.position;
-  sun.position.set(b.x + 28, 38, b.z + 18);
+  sun.position.copy(b).addScaledVector(DIR_SOL, DIST_SOL);
   sun.target.position.copy(b);
   sun.target.updateMatrixWorld();
 
