@@ -80,6 +80,7 @@ export class Powertrain {
     // --- regimen, con la relacion ANTERIOR al posible cambio ---------------
     // Con marcha engranada el motor va atado a las ruedas. En punto muerto o
     // durante el cambio el embrague esta abierto y sube/baja libre.
+    const rpmAntes = this.rpm;
     const ratioBefore = this.ratio;
     if (ratioBefore !== 0 && this.shiftTimer <= 0) {
       const rpmFromWheels = Math.abs(wheelRadsPerSec) * (60 / (2 * Math.PI))
@@ -91,6 +92,10 @@ export class Powertrain {
       this.rpm = clamp(this.rpm + Math.sign(target - this.rpm) * rate * dt,
         this.idleRPM, this.maxRPM);
     }
+    // Derivada del regimen: es LA senal que distingue un lift-off con marcha
+    // engranada (el motor frena al coche y cae en picado) de soltar el gas en
+    // punto muerto. Sin ella la llamarada saldria donde no toca.
+    this.rpmDeltaPerSec = dt > 0 ? (this.rpm - rpmAntes) / dt : 0;
     this.onLimiter = this.rpm >= this.maxRPM - 120;
 
     // --- caja automatica ---------------------------------------------------
@@ -110,13 +115,20 @@ export class Powertrain {
     const shifting = this.shiftTimer > 0;
     const ratio = this.ratio;
 
+    // EngineLoad del C++: un motor a 6000 rpm con el pie levantado tiene
+    // vueltas altas y carga cero — y suena completamente distinto.
+    this.load = shifting ? 0
+      : clamp(throttle01 * (0.55 + 0.45 * this.normalizedRPM), 0, 1);
+
     let torque = 0;
     if (!shifting && ratio !== 0 && !this.onLimiter) {
       const engineTorque = this.maxTorque * sampleTorqueCurve(this.rpm) * throttle01;
       torque = engineTorque * Math.abs(ratio) * this.finalRatio * this.efficiency
         * Math.sign(ratio);
     }
-    return { torque, rpm: this.rpm, gear: this.gear, shifting, onLimiter: this.onLimiter };
+    return { torque, rpm: this.rpm, gear: this.gear, shifting,
+      onLimiter: this.onLimiter, rpmDeltaPerSec: this.rpmDeltaPerSec,
+      load: this.load };
   }
 
   /** Cambio manual. Ignorado si la caja esta en automatico. */
@@ -157,5 +169,7 @@ export class Powertrain {
     this.rpm = this.idleRPM;
     this.shiftTimer = 0;
     this.onLimiter = false;
+    this.rpmDeltaPerSec = 0;
+    this.load = 0;
   }
 }

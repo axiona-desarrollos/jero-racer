@@ -17,6 +17,8 @@ import { buildRoundabout, buildLighting, GEO } from './world/roundabout.js';
 import { FixedLoop } from './core/loop.js';
 import { Input } from './core/input.js';
 import { Hud } from './ui/hud.js';
+import { EngineAudio } from './audio/engine.js';
+import { VehicleFX } from './vfx/vehicle-fx.js';
 
 const STEP = 1 / 60;
 const SPAWN = new THREE.Vector3(0, 0.06, GEO.islandR + 4.5);
@@ -43,8 +45,9 @@ const steering = new SteeringModel();
 const throttleM = new PedalModel();
 const brakeM = new PedalModel();
 const engine = new Powertrain();
+const audio = new EngineAudio();
 
-let vehicle, loop, hud, sun, cockpit = false, paused = false;
+let vehicle, loop, hud, sun, fx, cockpit = false, paused = false;
 let tiempoVolcado = 0;
 const TIEMPO_VUELCO = 2.5;   // segundos boca arriba antes de reponer
 let tel = null;
@@ -75,6 +78,12 @@ async function main() {
   scene.add(gltf.scene);
 
   vehicle = new Vehicle(RAPIER, world, gltf.scene, { spawn: SPAWN });
+  fx = new VehicleFX(scene, vehicle);
+
+  // El navegador exige un gesto del usuario para dejar sonar audio.
+  const arrancarAudio = () => { audio.start(); };
+  addEventListener('pointerdown', arrancarAudio, { once: true });
+  addEventListener('keydown', arrancarAudio, { once: true });
 
   $('#boot').style.display = 'none';
   hud = new Hud($('#hud'));
@@ -88,7 +97,7 @@ async function main() {
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loop.resync(); });
 
-  window.HR = { vehicle, scene, camera, renderer, world, RAPIER, steering, engine, input, loop,
+  window.HR = { vehicle, scene, camera, renderer, world, RAPIER, steering, engine, input, loop, audio, fx,
     reiniciar, get telemetria() { return tel; },
     /** Pinta un cuadro suelto con el bucle parado (inspeccion visual). */
     pintar: () => renderer.render(scene, camera) };
@@ -131,6 +140,11 @@ function simular(dt, world) {
     throttle: th, brake: br, handbrake: a.handbrake, analog: a.analog,
     front: slips.front, rear: slips.rear, airborne: slips.airborne,
     upsideDown: vehicle.isUpsideDown,
+    // lo que consumen audio y efectos
+    gearNum: engine.gear, normalizedRPM: engine.normalizedRPM,
+    load: out.load, rpmDeltaPerSec: out.rpmDeltaPerSec,
+    onLimiter: out.onLimiter, shifting: out.shifting,
+    slipRear: slips.rear, speedKmh: Math.abs(fwdKmh),
   };
 
   // --- recuperacion automatica -------------------------------------------
@@ -154,6 +168,12 @@ function presentar(alpha, dt) {
   if (input.justPressed('respawn')) reiniciar();
   if (input.justPressed('camera')) cockpit = !cockpit;
   if (input.justPressed('pause')) paused = !paused;
+  if (input.justPressed('mute')) audio.setEnabled(!audio.enabled);
+
+  if (tel) {
+    fx.update(tel, dt);
+    audio.update(tel, dt);
+  }
 
   actualizarCamara(dt);
 
@@ -196,6 +216,7 @@ function actualizarCamara(dt) {
 function reiniciar() {
   vehicle.respawn(SPAWN, 0);
   tiempoVolcado = 0;
+  if (fx) fx.clear();
   steering.reset();
   throttleM.reset();
   brakeM.reset();

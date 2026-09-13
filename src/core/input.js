@@ -32,6 +32,7 @@ export const DEFAULT_BINDINGS = Object.freeze({
   camera: ['KeyC'],
   respawn: ['KeyR'],
   pause: ['Escape', 'KeyP'],
+  mute: ['KeyM'],
 });
 
 export class Input {
