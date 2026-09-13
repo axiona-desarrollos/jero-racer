@@ -19,6 +19,10 @@ import {
   muestrearRelieve, suavizarRelieve, alturaEnRelieve,
 } from './world/photoreal.js';
 import { instalarCielo, alinearSol } from './world/cielo.js';
+import { Autopista } from './world/autopista.js';
+import { Trafico } from './traffic/trafico.js';
+import { Carrera, ESTADO } from './game/carrera.js';
+import { Marcador } from './ui/marcador.js';
 import { DirectorCamara } from './camera/director.js';
 import { modosPorDefecto } from './camera/modos.js';
 import { FixedLoop } from './core/loop.js';
@@ -31,7 +35,7 @@ const STEP = 1 / 60;
 
 // ?escena=pilsen  -> Medellin fotorrealista sobre la Glorieta Pilsen
 // (por defecto)   -> glorieta procedural, gratis e ilimitada
-const ESCENA = new URLSearchParams(location.search).get('escena') ?? 'proc';
+const ESCENA = new URLSearchParams(location.search).get('escena') ?? 'autopista';
 const CLAVE_TILES = import.meta.env.VITE_GOOGLE_3D_TILES_KEY ?? '';
 // Diagnostico: la clave NUNCA se expone, solo si llego y cuanto mide. Sin esto,
 // "Vite no cargo .env.local" y "Google rechazo la clave" se ven exactamente
@@ -48,7 +52,7 @@ const boot = t => { const e = $('#boot'); if (e) e.textContent = t; };
 // todos los volumenes de las teselas de Google — que son de escala planetaria —
 // y el arbol no refinaba nunca: 0 teselas visibles y un suelo fantasma a −19 km.
 // Medido: subiendo solo este valor, inFrustum pasa de 0 a 91 y visible de 0 a 33.
-const LEJOS = ESCENA === 'pilsen' ? 20000 : 600;
+const LEJOS = ESCENA === 'pilsen' ? 20000 : ESCENA === 'autopista' ? 2200 : 600;
 
 const canvas = $('#c');
 const renderer = new THREE.WebGLRenderer({
@@ -86,6 +90,7 @@ const engine = new Powertrain();
 const audio = new EngineAudio();
 
 let vehicle, loop, hud, sun, fx, director, ciudad = null, paused = false;
+let autopista = null, trafico = null, carrera = null, marcador = null;
 let interfazVisible = true;
 /** Contexto que se le pasa al director; se reutiliza para no asignar por frame. */
 const ctxCamara = { cuerpo: null, velocidadKmh: 0, derrapeGrados: 0, tiempo: 0 };
@@ -113,7 +118,24 @@ async function main() {
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
   let spawn = null;
-  if (ESCENA === 'pilsen' && CLAVE_TILES) {
+  if (ESCENA === 'autopista') {
+    boot('Tendiendo la autopista…');
+    autopista = new Autopista(scene, RAPIER, world, renderer);
+    trafico = new Trafico(scene, RAPIER, world);
+    carrera = new Carrera();
+    spawn = autopista.puntoDeSalida();
+    // Mismo cielo que Medellin, con el sol mas bajo: en una recta larga un sol
+    // cenital aplana el asfalto y no se lee el relieve de los carriles.
+    const cielo = instalarCielo(renderer, scene, {
+      elevacion: 34, azimut: 128, turbidez: 3.6,
+      intensidadFondo: 0.30, intensidadEntorno: 0.65,
+    });
+    DIR_SOL.copy(cielo.direccionSol);
+    alinearSol(sun, cielo.direccionSol, { distancia: DIST_SOL, intensidad: 2.9 });
+    // La niebla tiene que morir en el color del horizonte o se ve un telon gris
+    // recortado contra el cielo al final de la recta.
+    scene.fog = new THREE.Fog(0x9fb4c6, 420, 1900);
+  } else if (ESCENA === 'pilsen' && CLAVE_TILES) {
     spawn = await montarMedellin(world);
     if (!spawn) {
       boot('Las teselas no llegaron. Revisa la clave y la facturación.');
@@ -148,6 +170,11 @@ async function main() {
 
   $('#boot').style.display = 'none';
   hud = new Hud($('#hud'));
+  if (autopista) {
+    marcador = new Marcador($('#marcador'));
+    trafico.reiniciar(spawn.z);
+    carrera.reiniciar(spawn.z);
+  }
   resize();
 
   director = new DirectorCamara(camera, modosPorDefecto());
@@ -163,7 +190,7 @@ async function main() {
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loop.resync(); });
 
-  window.HR = { vehicle, scene, camera, renderer, world, RAPIER, steering, engine, input, loop, audio, fx, ciudad, director,
+  window.HR = { vehicle, scene, camera, renderer, world, RAPIER, steering, engine, input, loop, audio, fx, ciudad, director, autopista, trafico, carrera,
     reiniciar, get telemetria() { return tel; },
     /** Pinta un cuadro suelto con el bucle parado (inspeccion visual). */
     pintar: () => renderer.render(scene, camera) };
@@ -231,8 +258,20 @@ async function montarMedellin(world) {
 }
 
 // ------------------------------------------------------------------ fisica
+// Caja del coche en planta para la prueba de choque. Son las medidas del
+// chasis de CarConcept: no se sacan del collider porque Rapier guarda medios
+// extents ya rotados y aqui hace falta la caja en espacio local del vehiculo.
+const CAJA_JUGADOR = Object.freeze({ largo: 4.45, ancho: 1.95 });
+
 function simular(dt, world) {
   const a = input.sample();
+  // Tras el choque se corta el gas: la partida ha terminado y el coche tiene
+  // que pararse solo, no seguir acelerando mientras trompea.
+  if (carrera && carrera.estado === ESTADO.CHOCADO) {
+    a.throttle = 0;
+    a.brake = Math.max(a.brake, 0.35);
+    a.steer = 0;
+  }
   const fwdKmh = vehicle.forwardSpeedKmh;
   const slip = vehicle.yawSlipDeg;
 
@@ -255,6 +294,8 @@ function simular(dt, world) {
   vehicle.stepControls(dt);
   world.step();
   vehicle.capture();
+
+  if (autopista) actualizarAutopista(dt);
 
   // Todo el HUD describe UN solo instante: los deslizamientos se leen aqui,
   // junto al resto, no mezclados con valores del paso anterior.
@@ -286,6 +327,28 @@ function simular(dt, world) {
   }
 }
 
+/**
+ * Avanza la via, el trafico y el marcador.
+ *
+ * Se llama DESPUES de world.step() a proposito: la deteccion de choque tiene
+ * que mirar la posicion con la que el jugador ha quedado tras resolver la
+ * fisica, no la del paso anterior. Al reves se cuelan atravesamientos a alta
+ * velocidad — el coche pasa por dentro del camion entre dos comprobaciones.
+ */
+function actualizarAutopista(dt) {
+  const p = vehicle.body.translation();
+  autopista.actualizar(p.z);
+  trafico.actualizar(dt, p.z);
+
+  const q = vehicle.body.rotation();
+  const yaw = Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.z * q.z));
+  const choque = carrera.estado === ESTADO.RODANDO
+    ? trafico.choqueCon({ x: p.x, z: p.z, yaw, largo: CAJA_JUGADOR.largo, ancho: CAJA_JUGADOR.ancho })
+    : null;
+
+  carrera.actualizar(dt, p.z, choque, vehicle.speedKmh);
+}
+
 // --------------------------------------------------------------- presentar
 function presentar(alpha, dt) {
   vehicle.render(alpha);
@@ -313,6 +376,7 @@ function presentar(alpha, dt) {
 
   renderer.render(scene, camera);
   if (tel) hud.update(tel, dt, { fps: loop.fps, steps: loop.lastSteps, dropped: loop.dropped });
+  if (marcador) marcador.actualizar(carrera);
 }
 
 /**
@@ -331,6 +395,18 @@ function alternarInterfaz() {
 
 /** Reinicia TODO el estado, no solo el cuerpo rigido. */
 function reiniciar() {
+  // En la autopista no se vuelve al kilometro cero del mundo: se sigue en el
+  // mismo tramo y lo que se pone a cero es el marcador. Teletransportar el coche
+  // 80 km hacia atras rompe la ilusion de via infinita y, de paso, obliga a
+  // recargar todo el trafico de golpe.
+  if (autopista) {
+    const z = vehicle.body.translation().z;
+    SPAWN.copy(autopista.puntoDeSalida());
+    SPAWN.z = z + 12;
+    autopista.actualizar(SPAWN.z);
+    trafico.reiniciar(SPAWN.z);
+    carrera.reiniciar(SPAWN.z);
+  }
   vehicle.respawn(SPAWN, 0);
   tiempoVolcado = 0;
   if (fx) fx.clear();

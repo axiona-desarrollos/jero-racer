@@ -365,6 +365,22 @@ export class Vehicle {
 
   /** Carga aerodinamica proporcional a v^2, aplicada por detras del centro. */
   applyAero(refN = 3200, refKmh = 200) {
+    // LAS FUERZAS DE RAPIER NO SE BORRAN SOLAS: se acumulan paso tras paso hasta
+    // que alguien las resetea. Llamar a esto en cada fotograma sumaba ~2,5 kN por
+    // paso, mas de 150 kN por segundo de marcha, y el coche acababa aplastado
+    // contra el asfalto con la suspension trasera tocando fondo.
+    //
+    // Y HAY QUE RESETEAR LAS DOS COSAS. addForceAtPoint se descompone dentro de
+    // Rapier en una fuerza EN EL CENTRO DE MASAS mas un PAR igual a r x F.
+    // resetForces() solo borra la primera mitad: el par seguia sumando ~350 N·m
+    // por paso, 21.000 N·m por segundo, y a los 85 km/h el coche daba un mortal
+    // hacia atras y se quedaba de pie sobre la cola con las ruedas al aire.
+    // Medido: sano hasta 82 km/h, y a 85 despegaba hasta 2,09 m de altura.
+    //
+    // En la glorieta nunca se vio porque el umbral son 60 km/h y alli casi no se
+    // mantienen; en una recta larga mata el coche en cinco segundos.
+    this.body.resetForces(false);
+    this.body.resetTorques(false);
     const s = this.speedKmh;
     if (s < 60) return;
     const r = s / refKmh;
