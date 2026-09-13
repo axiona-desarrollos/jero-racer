@@ -14,7 +14,10 @@ import { SteeringModel, PedalModel, clamp, lerp } from './vehicle/steering.js';
 import { Powertrain } from './vehicle/powertrain.js';
 import { Vehicle } from './vehicle/vehicle.js';
 import { buildRoundabout, buildLighting, GEO } from './world/roundabout.js';
-import { CiudadFotorrealista, construirCalzadaOSM } from './world/photoreal.js';
+import {
+  CiudadFotorrealista, construirCalzadaOSM, radioEjeOSM,
+  muestrearRelieve, suavizarRelieve, alturaEnRelieve,
+} from './world/photoreal.js';
 import { FixedLoop } from './core/loop.js';
 import { Input } from './core/input.js';
 import { Hud } from './ui/hud.js';
@@ -27,17 +30,36 @@ const STEP = 1 / 60;
 // (por defecto)   -> glorieta procedural, gratis e ilimitada
 const ESCENA = new URLSearchParams(location.search).get('escena') ?? 'proc';
 const CLAVE_TILES = import.meta.env.VITE_GOOGLE_3D_TILES_KEY ?? '';
+// Diagnostico: la clave NUNCA se expone, solo si llego y cuanto mide. Sin esto,
+// "Vite no cargo .env.local" y "Google rechazo la clave" se ven exactamente
+// igual desde fuera: la escena cae al respaldo procedural y no dice por que.
+if (typeof window !== 'undefined') {
+  window.__HR_ENV = { escena: ESCENA, claveLongitud: CLAVE_TILES.length };
+}
 const SPAWN = new THREE.Vector3(0, 0.06, GEO.islandR + 4.5);
 const $ = s => document.querySelector(s);
 const boot = t => { const e = $('#boot'); if (e) e.textContent = t; };
 
+// ALCANCE DE LA CAMARA: los 600 m valian para una glorieta de 71 m envuelta en
+// niebla. En Medellin fotorrealista ese plano lejano dejaba FUERA del frustum
+// todos los volumenes de las teselas de Google — que son de escala planetaria —
+// y el arbol no refinaba nunca: 0 teselas visibles y un suelo fantasma a −19 km.
+// Medido: subiendo solo este valor, inFrustum pasa de 0 a 91 y visible de 0 a 33.
+const LEJOS = ESCENA === 'pilsen' ? 20000 : 600;
+
 const canvas = $('#c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({
+  canvas, antialias: true, powerPreference: 'high-performance',
+  // 0,1 m de cerca y 20 km de lejos son 200.000:1: un buffer de profundidad
+  // normal no da para eso y el z-fighting se come la ciudad. Solo se paga en
+  // la escena que lo necesita.
+  logarithmicDepthBuffer: ESCENA === 'pilsen',
+});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0e14);
-const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 600);
+const camera = new THREE.PerspectiveCamera(58, 1, 0.1, LEJOS);
 
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
@@ -75,16 +97,23 @@ async function main() {
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-  let spawn = SPAWN;
+  let spawn = null;
   if (ESCENA === 'pilsen' && CLAVE_TILES) {
     spawn = await montarMedellin(world);
-  } else {
-    if (ESCENA === 'pilsen') {
-      boot('Falta VITE_GOOGLE_3D_TILES_KEY en .env.local — usando la glorieta procedural');
-      await new Promise(r => setTimeout(r, 2200));
+    if (!spawn) {
+      boot('Las teselas no llegaron. Revisa la clave y la facturación.');
+      await new Promise(r => setTimeout(r, 2600));
     }
+  } else if (ESCENA === 'pilsen') {
+    boot('Falta VITE_GOOGLE_3D_TILES_KEY en .env.local — usando la glorieta procedural');
+    await new Promise(r => setTimeout(r, 2200));
+  }
+  // Un fallo de red o de clave no puede dejar el juego sin suelo: siempre hay
+  // glorieta procedural debajo.
+  if (!spawn) {
     boot('Construyendo la glorieta…');
     buildRoundabout(scene, RAPIER, world);
+    spawn = SPAWN.clone();
   }
 
   boot('Cargando CarConcept…');
@@ -123,9 +152,13 @@ async function main() {
 }
 
 /**
- * Monta Medellin fotorrealista y devuelve el punto de aparicion del coche.
- * Espera a que las teselas den una altura de suelo REAL antes de construir
- * los colisionadores: adivinarla deja el coche flotando o enterrado.
+ * Monta Medellin fotorrealista y devuelve el punto de aparicion del coche,
+ * o null si las teselas no llegaron (clave mala, sin facturacion, sin red).
+ *
+ * El orden importa: primero se MIDE donde esta el asfalto de verdad y se ancla
+ * el globo a esa altura, y solo despues se crean los colisionadores. Al reves
+ * el coche aparece flotando o enterrado — o, como pasaba antes, a 19 km bajo
+ * tierra sobre la malla del globo sin refinar.
  */
 async function montarMedellin(world) {
   boot('Cargando la Glorieta Pilsen…');
@@ -135,27 +168,33 @@ async function montarMedellin(world) {
   boot('Conectando con Google Photorealistic 3D Tiles…');
   ciudad = new CiudadFotorrealista(scene, camera, renderer, pista, CLAVE_TILES);
   ciudad.onAtribucion = txt => { const e = $('#atrib'); if (e) e.textContent = txt; };
+  ciudad.onProgreso = s => boot(
+    `Descargando Medellín… ${s.visible} teselas en pantalla, ${s.downloading} en vuelo`);
 
-  // La camara tiene que estar donde estara el coche o las teselas de esa zona
-  // no se piden: el streaming es por error de pantalla, no por proximidad.
-  camera.position.set(0, 60, 90);
-  camera.lookAt(0, 0, 0);
-
-  const t0 = performance.now();
-  while (!ciudad.listo) {
-    ciudad.update();
-    renderer.render(scene, camera);
-    boot(`Descargando Medellín… ${ciudad.cargando} teselas`);
-    await new Promise(r => requestAnimationFrame(r));
-    if (performance.now() - t0 > 30000) {
-      boot('Las teselas tardan demasiado. Revisa la clave y la facturación.');
-      await new Promise(r => setTimeout(r, 3000));
-      break;
-    }
+  const radio = radioEjeOSM(pista);
+  const medida = await ciudad.anclarEnElSuelo(radio);
+  if (!medida) {
+    console.error('[medellin] sin geometria. Errores de carga:', ciudad.errores.slice(0, 5));
+    ciudad.dispose();
+    ciudad = null;
+    return null;
   }
+  console.info('[medellin] asfalto anclado', medida);
 
-  const y = ciudad.alturaSuelo ?? 0;
-  const calz = construirCalzadaOSM(scene, RAPIER, world, pista, y);
+  // El suelo de colision se MIDE sobre la fotogrametria: la glorieta real tiene
+  // 2,76 m de desnivel y ni un disco plano ni un plano inclinado la aproximan.
+  boot('Midiendo el relieve real de la glorieta…');
+  await new Promise(r => setTimeout(r, 32));   // que el texto llegue a pintarse
+  const t0 = performance.now();
+  const crudo = muestrearRelieve(ciudad, { lado: 150, celdas: 128 });
+  const relieve = { ...crudo, alturas: suavizarRelieve(crudo.alturas, crudo.n, 2) };
+  console.info('[medellin] relieve', {
+    muestras: crudo.n * crudo.n,
+    huecosSinTapar: crudo.huecos,
+    ms: Math.round(performance.now() - t0),
+  });
+
+  const calz = construirCalzadaOSM(scene, RAPIER, world, pista, relieve, medida.alturaSuelo);
   // El sol del escenario procedural estorba aqui: la fotogrametria ya viene
   // con su iluminacion horneada. Se baja a relleno suave.
   sun.intensity = 0.55;
@@ -163,8 +202,10 @@ async function montarMedellin(world) {
   scene.background = new THREE.Color(0x0a0e14);
 
   boot('');
-  // Aparecer en la calzada, no en la isleta.
-  return new THREE.Vector3(0, y + 0.30, calz.radioEje);
+  // Aparecer en la calzada, no en la isleta, y a la altura que de verdad va a
+  // sostener el heightfield en ESE punto — no a la media de la glorieta.
+  const ySpawn = alturaEnRelieve(relieve, 0, calz.radioEje);
+  return new THREE.Vector3(0, ySpawn + 0.30, calz.radioEje);
 }
 
 // ------------------------------------------------------------------ fisica

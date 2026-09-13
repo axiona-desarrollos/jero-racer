@@ -65,20 +65,32 @@ export class ParticleSystem {
       transparent: true,
       depthWrite: this.o.depthWrite,
       blending: this.o.blending,
+      // Los #include de profundidad logaritmica NO son decoracion: la escena
+      // fotorrealista de Medellin necesita 20 km de alcance y ahi el buffer de
+      // profundidad pasa a ser logaritmico. Un ShaderMaterial crudo no se entera
+      // y escribe la profundidad lineal: el humo y las llamas se colarian por
+      // delante de los edificios. Cuando el buffer es normal, los chunks se
+      // compilan a nada.
       vertexShader: `
         attribute float size; attribute float alpha; attribute vec3 color;
         varying float vA; varying vec3 vC;
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
         void main(){
           vA = alpha; vC = color;
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
           gl_PointSize = size * (300.0 / max(1.0, -mv.z));
           gl_Position = projectionMatrix * mv;
+          #include <logdepthbuf_vertex>
         }`,
       fragmentShader: `
         uniform sampler2D mapa; varying float vA; varying vec3 vC;
+        #include <common>
+        #include <logdepthbuf_pars_fragment>
         void main(){
           vec4 t = texture2D(mapa, gl_PointCoord);
           if (t.a * vA < 0.004) discard;
+          #include <logdepthbuf_fragment>
           gl_FragColor = vec4(vC, t.a * vA);
         }`,
     });
