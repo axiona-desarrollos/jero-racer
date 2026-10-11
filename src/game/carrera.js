@@ -94,6 +94,41 @@ export class Carrera {
     this.mejorCombo = 0;
     /** Ultimo bono, para que la interfaz lo anuncie. */
     this.ultimoBono = null;
+    /** Dano del coche por embestidas y balas, 0..100. A 100 lo detienen. */
+    this.danio = 0;
+    /** 'choque' contra el trafico o 'detenido' por la policia. */
+    this.motivo = null;
+    /** Mientras hay persecucion los puntos valen mas. */
+    this.enPersecucion = false;
+    this.persecuciones = 0;
+  }
+
+  /**
+   * Golpe de la policia o el ejercito (embestida o bala).
+   * @returns {boolean} true si con este golpe lo detienen
+   */
+  danar(cantidad, quien = 'la Policía') {
+    if (this.estado !== ESTADO.RODANDO) return false;
+    this.danio = Math.min(100, this.danio + cantidad);
+    if (this.danio >= 100) {
+      this.estado = ESTADO.CHOCADO;
+      this.motivo = 'detenido';
+      this.esperaChoque = ESPERA_TRAS_CHOQUE;
+      this.metrosAlChocar = this.metros;
+      this.choqueCon = quien;
+      this.combo = 0; this.tCombo = 0;
+      return true;
+    }
+    return false;
+  }
+
+  /** Bono por aguantar una persecucion: mas largo, mas puntos. */
+  bonoEscape(segundos) {
+    if (this.estado !== ESTADO.RODANDO || segundos < 3) return 0;
+    const bono = Math.round(segundos * 45 / 10) * 10;
+    this.puntos += bono;
+    this.persecuciones++;
+    return bono;
   }
 
   get km() { return this.metros / 1000; }
@@ -139,7 +174,7 @@ export class Carrera {
     this.zAnterior = z;
     if (avance > 0) {
       this.metros += avance;
-      this.puntos += avance * multiplicadorVelocidad(velocidadKmh);
+      this.puntos += avance * multiplicadorVelocidad(velocidadKmh) * (this.enPersecucion ? 1.5 : 1);
     }
     this.velocidadMax = Math.max(this.velocidadMax, velocidadKmh);
 
@@ -163,6 +198,7 @@ export class Carrera {
 
     if (choque) {
       this.estado = ESTADO.CHOCADO;
+      this.motivo = 'choque';
       this.esperaChoque = ESPERA_TRAS_CHOQUE;
       this.metrosAlChocar = this.metros;
       this.choqueCon = choque.tipo?.nombre ?? (choque.esCamion ? 'camión' : 'vehículo');

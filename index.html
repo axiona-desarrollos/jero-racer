@@ -89,7 +89,27 @@
     border-radius:8px;padding:0 8px;min-width:30px;text-align:center}
   .veloc .rpm{flex:1;height:5px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden}
   .veloc .rpm i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--neon),var(--ambar) 80%,var(--rojo));border-radius:5px}
-  .combo{position:absolute;left:50%;top:calc(92px + var(--sa-t));transform:translateX(-50%);
+  /* Persecucion: banner con destello rojo/azul y barra de dano. */
+  .persecucion{position:absolute;left:50%;top:calc(96px + var(--sa-t));transform:translateX(-50%);text-align:center;
+    background:rgba(10,12,20,.82);border:2px solid #ff2d3a;border-radius:14px;padding:4px 16px 6px;
+    animation:sirena .5s steps(1) infinite;white-space:nowrap}
+  .persecucion span{font-family:var(--titulo);font-size:15px;letter-spacing:2px;color:#fff}
+  .persecucion b{font-family:var(--titulo);font-weight:400;font-size:14px;color:var(--ambar);margin-left:8px}
+  .persecucion small{display:block;font-size:12px;font-weight:700;color:var(--dim);letter-spacing:1px}
+  @keyframes sirena{0%{border-color:#ff2d3a;box-shadow:0 0 18px rgba(255,45,58,.6)}50%{border-color:#2d7bff;box-shadow:0 0 18px rgba(45,123,255,.6)}}
+  .danio{display:flex;align-items:center;gap:6px;margin-top:5px}
+  .danio span{font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--dim)}
+  .danio .barraD{flex:1;height:6px;border-radius:6px;background:rgba(255,255,255,.1);overflow:hidden}
+  .danio .barraD i{display:block;height:100%;width:0;border-radius:6px;background:linear-gradient(90deg,var(--ambar),var(--rojo));transition:width .2s}
+  .danio.alto span{color:var(--rojo);animation:sirena .6s steps(1) infinite}
+  /* TikTok: botones con el cian y fucsia de la marca. */
+  .tiktok{display:flex;gap:8px;flex-wrap:wrap}
+  .tiktok a{display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff;background:#0b0b12;
+    border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:7px 12px;font-weight:700;font-size:15px;letter-spacing:.5px;
+    text-shadow:-1px -1px 0 #25f4ee,1px 1px 0 #fe2c55}
+  .tiktok a i{font-style:normal;font-size:17px}
+  .tiktok a:active{transform:scale(.97)}
+  .combo{position:absolute;left:50%;top:calc(150px + var(--sa-t));transform:translateX(-50%);
     font-family:var(--titulo);font-size:15px;letter-spacing:2px;color:var(--ambar);opacity:0;transition:opacity .25s}
   .combo.on{opacity:1}
   .combo .t{display:block;height:3px;margin-top:4px;border-radius:3px;background:var(--ambar);transform-origin:left}
@@ -147,6 +167,8 @@
     padding:22px;display:flex;flex-direction:column;gap:14px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)}
   .caja h2{margin:0;font-family:var(--titulo);font-weight:400;font-size:clamp(34px,7vw,48px);letter-spacing:3px}
   #fin h2{color:var(--rojo)} #fin.record h2{color:var(--neon)}
+  #fin.detenido h2{color:#fff;animation:sirenaTexto .5s steps(1) infinite}
+  @keyframes sirenaTexto{0%{text-shadow:0 0 22px #ff2d3a}50%{text-shadow:0 0 22px #2d7bff}}
   .caja .detalle{color:var(--dim);font-size:15px;font-weight:600}
   .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .stats div{background:rgba(255,255,255,.04);border:1px solid rgba(120,175,215,.14);border-radius:12px;padding:8px 6px}
@@ -196,6 +218,8 @@
     .veloc{padding:4px 12px 6px;min-width:100px} .veloc .kmh{font-size:26px}
     .bIcono{width:40px;height:40px;border-radius:12px} .bIcono svg{width:19px;height:19px}
     #avisos{top:30%}
+    .persecucion{top:calc(70px + var(--sa-t));padding:2px 12px 4px} .persecucion small{font-size:11px}
+    .tiktok a{font-size:13px;padding:5px 10px}
   }
 </style>
 </head>
@@ -206,6 +230,7 @@
   <div class="logo">JERO <b>RACER</b></div>
   <div class="barra"><i id="bootBarra"></i></div>
   <div class="msg" id="bootMsg">Cargando…</div>
+  <div class="msg">Síguenos en TikTok: <b style="color:#25f4ee">@jerofernandez222</b> · <b style="color:#fe2c55">@TAKAMURA.0</b></div>
 </div>
 
 <div id="hud" hidden></div>
@@ -224,8 +249,11 @@
     <div class="veloc">
       <div class="kmh"><span id="hVel">0</span><i>KM/H</i></div>
       <div class="fila"><div class="rpm"><i id="hRpm"></i></div><div class="marcha" id="hMarcha">1</div></div>
+      <div class="danio" id="hDanio" hidden><span>DAÑO</span><div class="barraD"><i id="hDanioB"></i></div></div>
     </div>
   </div>
+  <div class="persecucion" id="hPersecucion" hidden><span>🚨 PERSECUCIÓN</span><b>PUNTOS ×1.5</b>
+    <small>Baje de 170 km/h para que lo dejen</small></div>
   <div class="combo" id="hCombo">COMBO x<span id="hComboN">1</span><i class="t" id="hComboT"></i></div>
   <div id="avisos"></div>
 </div>
@@ -247,6 +275,10 @@
       <button class="op" id="oInstalar" hidden><span>⤓</span> INSTALAR APP</button>
     </div>
     <div class="girar" id="mInstalarIOS" hidden style="display:block">Para instalarla en el iPhone: toca <b>Compartir</b> y luego <b>Agregar a inicio</b>.</div>
+    <div class="tiktok">
+      <a href="https://www.tiktok.com/@jerofernandez222" target="_blank" rel="noopener"><i>♪</i>@jerofernandez222</a>
+      <a href="https://www.tiktok.com/@takamura.0" target="_blank" rel="noopener"><i>♪</i>@TAKAMURA.0</a>
+    </div>
     <div class="girar">↻ Gira el teléfono en horizontal para jugar mejor</div>
     <div class="pie">Un juego de <a href="https://axionasoft.com" target="_blank" rel="noopener">Axiona Desarrollos Inteligentes</a> · Sabaneta, Colombia<br>
       Deportivo: «Car Concept», Khronos Group (CC BY 4.0) · Tráfico y escenario modelados por Axiona</div>
@@ -275,6 +307,10 @@
     <div class="record" id="fRecord"></div>
     <button class="bPrincipal" id="bOtra">OTRA VEZ</button>
     <div class="fila"><button class="bSecundario" id="bCompartir">COMPARTIR</button><button class="bSecundario" id="bMenuF">MENÚ</button></div>
+    <div class="tiktok" style="justify-content:center">
+      <a href="https://www.tiktok.com/@jerofernandez222" target="_blank" rel="noopener"><i>♪</i>@jerofernandez222</a>
+      <a href="https://www.tiktok.com/@takamura.0" target="_blank" rel="noopener"><i>♪</i>@TAKAMURA.0</a>
+    </div>
   </div>
 </div>
 

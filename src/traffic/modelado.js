@@ -106,6 +106,10 @@ export const REGION = Object.freeze({
   trasTakamura:   [512, 1792, 1024, 2048],
   trasJero:       [1024, 1792, 1536, 2048],
   trasRacer:      [1536, 1792, 2048, 2048],
+  // Persecucion y mas publicidad (reusan huecos del atlas que ya no se usaban)
+  policiaLado:    [0, 136, 1024, 238],
+  ejercitoLado:   [0, 400, 1024, 500],
+  pubBusTakamura: [0, 800, 800, 928],
 });
 
 let atlasCache = null;
@@ -148,28 +152,6 @@ export function atlasCalcas() {
     g.fillText(txt, p.x + p.w / 2, p.y + p.h / 2 + 2);
   }
 
-  // Rotulos de carga. Fondo blanco: el color lo pone el tinte del vehiculo.
-  const rotulo = (r, titulo, sub, acento) => {
-    const p = rect(r);
-    g.fillStyle = '#ffffff'; g.fillRect(p.x, p.y, p.w, p.h);
-    const grd = g.createLinearGradient(p.x, 0, p.x + p.w, 0);
-    grd.addColorStop(0, acento); grd.addColorStop(1, '#0a0e14');
-    g.fillStyle = grd;
-    g.beginPath();
-    g.moveTo(p.x, p.y + p.h * 0.70);
-    g.bezierCurveTo(p.x + p.w * 0.35, p.y + p.h * 0.50, p.x + p.w * 0.65, p.y + p.h * 0.95, p.x + p.w, p.y + p.h * 0.62);
-    g.lineTo(p.x + p.w, p.y + p.h); g.lineTo(p.x, p.y + p.h); g.closePath(); g.fill();
-    g.fillStyle = '#0a0e14';
-    g.font = 'bold 88px "Arial Black", Arial, sans-serif';
-    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
-    g.fillText(titulo, p.x + 50, p.y + 120);
-    g.fillStyle = acento;
-    g.font = 'bold 34px Arial, sans-serif';
-    g.fillText(sub, p.x + 54, p.y + 166);
-  };
-  rotulo(REGION.rotuloA, 'AXIONA', 'LOGÍSTICA INTELIGENTE · SABANETA', '#00b894');
-  rotulo(REGION.rotuloB, 'JERO RACER', 'TRANSPORTES DE ALTA VELOCIDAD', '#e8402a');
-
   // Franjas de bus intermunicipal: el colorido clasico de las flotas.
   const franjas = (r, colores) => {
     const p = rect(r);
@@ -186,7 +168,9 @@ export function atlasCalcas() {
     });
   };
   franjas(REGION.franjasBus, ['#e8402a', '#f3c614', '#1d6fd1']);
-  franjas(REGION.franjasBus2, ['#00a86b', '#f3c614', '#ffffff']);
+  PUB.franjaPolicia(g, REGION.policiaLado);
+  PUB.franjaEjercito(g, REGION.ejercitoLado);
+  PUB.busTakamura(g, REGION.pubBusTakamura);
 
   // Parrilla cromada de tractomula: barras horizontales.
   {
@@ -741,7 +725,10 @@ export function materialFlota({ fisico = true } = {}) {
         totalEmissiveRadiance += vec3(1.0, 0.012, 0.004) * (0.30 + 1.25 * vEstado.x) * esCodigo(luz, 2.0);
         totalEmissiveRadiance += vec3(1.0, 0.36, 0.0) * 1.5 * vEstado.y * esCodigo(luz, 3.0);
         totalEmissiveRadiance += vec3(1.0, 0.36, 0.0) * 1.5 * vEstado.z * esCodigo(luz, 4.0);
-        totalEmissiveRadiance += diffuseColor.rgb * 1.5 * esCodigo(luz, 5.0);`);
+        totalEmissiveRadiance += diffuseColor.rgb * 1.5 * esCodigo(luz, 5.0);
+        // Barra de luces de persecucion: roja con vEstado.y, azul con vEstado.z.
+        totalEmissiveRadiance += vec3(1.0, 0.03, 0.03) * (0.12 + 2.6 * vEstado.y) * esCodigo(luz, 6.0);
+        totalEmissiveRadiance += vec3(0.08, 0.28, 1.0) * (0.12 + 3.0 * vEstado.z) * esCodigo(luz, 7.0);`);
     if (fisico) {
       sh.fragmentShader = sh.fragmentShader.replace('#include <lights_physical_fragment>',
         `#include <lights_physical_fragment>

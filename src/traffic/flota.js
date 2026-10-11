@@ -344,7 +344,7 @@ function hatchback({ taxi = false } = {}) {
 }
 
 // --------------------------------------------------------------- SUV
-function suv() {
+function suv({ extras: masExtras = null, revestimiento = 0.60 } = {}) {
   return turismo({
     ancho: 1.86, alto: 1.75,
     cuerpo: [
@@ -377,21 +377,24 @@ function suv() {
     tomaBaja: { w: 1.05, h: 0.09, y: 0.55 },
     placaF: 0.59, placaR: 0.74, faldonR: 0.55,
     espejos: { z: 0.88, y: 1.13 },
-    revestimiento: 0.60,
+    revestimiento,
     matPaso: M.plastico, anchoPaso: 0.075,
     extras: (c) => {
-      for (const s of [1, -1]) {
-        c.cilindroZ(0.018, 1.95, s * 0.60, 1.775, -0.92, M.aluminio, 8);
-        for (const z of [0.0, -1.85]) c.caja(0.04, 0.05, 0.08, s * 0.60, 1.75, z, M.plastico);
+      if (!masExtras) {
+        for (const s of [1, -1]) {
+          c.cilindroZ(0.018, 1.95, s * 0.60, 1.775, -0.92, M.aluminio, 8);
+          for (const z of [0.0, -1.85]) c.caja(0.04, 0.05, 0.08, s * 0.60, 1.75, z, M.plastico);
+        }
       }
       // Tercer stop sobre la luneta.
       c.panel(0.32, 0.035, 0.03, 0.01, 0, 1.69, -2.155, M.piloto, [0, Math.PI, 0]);
+      masExtras?.(c);
     },
   });
 }
 
 // ------------------------------------------------------------ pickup
-function pickup() {
+function pickup({ extras: masExtras = null } = {}) {
   return turismo({
     ancho: 1.86, alto: 1.82,
     cuerpo: [
@@ -432,6 +435,7 @@ function pickup() {
       c.caja(1.74, 0.025, 0.07, 0, 1.09, -2.6, M.plasticoS);
       // Parachoques trasero de acero.
       c.caja(1.7, 0.13, 0.14, 0, 0.55, -2.68, M.acero);
+      masExtras?.(c);
     },
   });
 }
@@ -478,7 +482,8 @@ function van() {
 }
 
 // --------------------------------------------------------------- bus
-function bus() {
+/** @param {{anuncio?:number[], largoAnuncio?:number}} o anuncio del costado trasero */
+function bus({ anuncio = REGION.pubBus, largoAnuncio = 5.0 } = {}) {
   const c = new Constructor();
   const L = 12.0, W = 1.27;
   const zF = L / 2, zR = -L / 2;
@@ -527,8 +532,8 @@ function bus() {
   for (const s of [1, -1]) {
     c.cajaConCalca(0.01, 0.78, 5.4, s * (W + 0.004), 1.42, 2.6, s > 0 ? '+x' : '-x',
       calca(REGION.franjasBus), M.pintura);
-    c.cajaConCalca(0.012, 0.8, 5.0, s * (W + 0.005), 1.42, -2.95, s > 0 ? '+x' : '-x',
-      calca(REGION.pubBus), M.plastico);
+    c.cajaConCalca(0.012, 0.8, largoAnuncio, s * (W + 0.005), 1.42, -2.95, s > 0 ? '+x' : '-x',
+      calca(anuncio), M.plastico);
   }
 
   // Frontal: parabrisas grande algo inclinado, letrero de destino, luces.
@@ -817,6 +822,58 @@ export function fabricar(tipo, nivel = 1) {
   }
 }
 
+// ------------------------------------------------- persecucion
+const LUZ_ROJA = { c: 0x5a0a0a, r: 0.2, m: 0.1, l: 6, k: 0.4 };
+const LUZ_AZUL = { c: 0x0a1a5a, r: 0.2, m: 0.1, l: 7, k: 0.4 };
+
+/** Barra de luces de techo: mitad roja (+X) y mitad azul (−X). */
+function barraDeLuces(c, y, z, ancho = 1.25) {
+  c.caja(ancho, 0.07, 0.32, 0, y, z, M.plastico);
+  c.caja(ancho / 2 - 0.04, 0.1, 0.26, ancho / 4, y + 0.08, z, LUZ_ROJA);
+  c.caja(ancho / 2 - 0.04, 0.1, 0.26, -ancho / 4, y + 0.08, z, LUZ_AZUL);
+  c.caja(0.07, 0.11, 0.27, 0, y + 0.08, z, M.blanco);
+}
+
+/** Patrulla de la Policia Nacional: camioneta blanca con franja verde. */
+function patrulla() {
+  return suv({
+    revestimiento: 0.5,
+    extras: (c) => {
+      barraDeLuces(c, 1.76, -0.35);
+      // Franja de puertas con POLICIA y el 123, a los dos lados.
+      for (const s of [1, -1]) {
+        c.cajaConCalca(0.012, 0.32, 3.3, s * 0.928, 0.86, -0.1, s > 0 ? '+x' : '-x', calca(REGION.policiaLado), M.pintura);
+      }
+      c.cajaConCalca(1.3, 0.16, 0.012, 0, 0.92, -2.3, '-z', calca(REGION.policiaLado), M.pintura);
+      // Defensa delantera negra con dos destellos.
+      c.caja(1.5, 0.08, 0.06, 0, 0.62, 2.36, M.plastico);
+      c.caja(0.06, 0.32, 0.06, 0.55, 0.5, 2.36, M.plastico);
+      c.caja(0.06, 0.32, 0.06, -0.55, 0.5, 2.36, M.plastico);
+      c.caja(0.16, 0.06, 0.04, 0.3, 0.66, 2.39, LUZ_ROJA);
+      c.caja(0.16, 0.06, 0.04, -0.3, 0.66, 2.39, LUZ_AZUL);
+    },
+  });
+}
+
+/** Camioneta del Ejercito Nacional: verde oliva, defensa y luces. */
+function militar() {
+  return pickup({
+    extras: (c) => {
+      barraDeLuces(c, 1.84, 0.0, 1.1);
+      for (const s of [1, -1]) {
+        c.cajaConCalca(0.012, 0.3, 3.2, s * 0.928, 0.86, -0.2, s > 0 ? '+x' : '-x', calca(REGION.ejercitoLado), M.pintura);
+      }
+      // Defensa de tubos y antena.
+      c.caja(1.7, 0.1, 0.1, 0, 0.66, 2.72, M.plastico);
+      for (const x of [-0.5, 0.5]) c.caja(0.08, 0.5, 0.08, x, 0.82, 2.72, M.plastico);
+      c.caja(1.1, 0.08, 0.08, 0, 1.06, 2.72, M.plastico);
+      c.cilindroY(0.012, 1.4, -0.8, 1.8, -2.4, M.plastico, 5);
+      // Lona sobre el platon.
+      c.caja(1.7, 0.55, 1.85, 0, 1.36, -1.66, M.pintura2);
+    },
+  });
+}
+
 // ------------------------------------------------------------ catalogo
 const BLANCO = 0xedeeec, PLATA = 0xb7bbc1, GRIS = 0x5e636a, NEGRO = 0x141619;
 const ROJO = 0x9c1b1d, AZUL = 0x1d3c6c, VINO = 0x581521, BEIGE = 0xbcab8c;
@@ -840,8 +897,12 @@ export const TIPOS = [
   { id: 'pickup', nombre: 'camioneta platón', crear: pickup, peso: 7, paleta: [BLANCO, PLATA, GRIS, NEGRO, ROJO, AZUL] },
   { id: 'van', nombre: 'van', crear: van, peso: 6, paleta: [BLANCO, BLANCO, PLATA, AZUL] },
   {
-    id: 'bus', nombre: 'bus', crear: bus, peso: 7, pesado: true,
+    id: 'bus', nombre: 'bus', crear: () => bus(), peso: 5, pesado: true,
     paleta: [BLANCO, 0xe8e1cc, 0x1b4f93, 0x0c6b48, 0xb01d24],
+  },
+  {
+    id: 'busTakamura', nombre: 'bus', crear: () => bus({ anuncio: REGION.pubBusTakamura, largoAnuncio: 5.0 }),
+    peso: 4, pesado: true, paleta: [BLANCO, 0xe8e1cc, 0xb01d24],
   },
   // Camiones con publicidad: axionasoft.com, Takamura (rojo, letras chinas)
   // y el TikTok de Jero.
@@ -851,12 +912,12 @@ export const TIPOS = [
     paleta: [BLANCO, BLANCO, 0x1b2a3a, AZUL], paleta2: [0xf2f2f0],
   },
   {
-    id: 'camionTakamura', nombre: 'camión', peso: 3, pesado: true,
+    id: 'camionTakamura', nombre: 'camión', peso: 5, pesado: true,
     crear: () => camion({ lateral: REGION.pubTakamura, trasera: REGION.trasTakamura }),
     paleta: [0xb3101b, BLANCO], paleta2: [0xb3101b],
   },
   {
-    id: 'camionJero', nombre: 'camión', peso: 3, pesado: true,
+    id: 'camionJero', nombre: 'camión', peso: 5, pesado: true,
     crear: () => camion({ lateral: REGION.pubJero, trasera: REGION.trasJero }),
     paleta: [NEGRO, BLANCO, 0x2b2b38], paleta2: [0x15151c],
   },
@@ -871,13 +932,19 @@ export const TIPOS = [
     paleta: [BLANCO, AZUL, NEGRO, 0x1f6b45], paleta2: [0xf2f2f0],
   },
   {
-    id: 'mulaJero', nombre: 'tractomula', peso: 3, pesado: true,
+    id: 'mulaJero', nombre: 'tractomula', peso: 4, pesado: true,
     crear: () => tractomula({ contenedor: false, lateral: REGION.mulaJero, trasera: REGION.trasJero }),
     paleta: [NEGRO, ROJO, BLANCO], paleta2: [0x15151c],
   },
   {
-    id: 'mulaTakamura', nombre: 'tractomula', peso: 2, pesado: true,
+    id: 'mulaTakamura', nombre: 'tractomula', peso: 4, pesado: true,
     crear: () => tractomula({ contenedor: false, lateral: REGION.pubTakamura, trasera: REGION.trasTakamura, proporcion: 4 }),
     paleta: [0xb3101b, NEGRO], paleta2: [0xb3101b],
   },
 ];
+
+/** Vehiculos de la persecucion. No circulan en el trafico normal. */
+export const TIPOS_PERSECUCION = {
+  patrulla: { id: 'patrulla', nombre: 'patrulla', crear: patrulla, paleta: [0xf4f5f3] },
+  militar: { id: 'militar', nombre: 'Ejército', crear: militar, paleta: [0x4a5130], paleta2: [0x5a6140] },
+};

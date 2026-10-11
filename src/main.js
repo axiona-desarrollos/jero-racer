@@ -31,6 +31,8 @@ import { instalarCielo, alinearSol } from './world/cielo.js';
 import { Autopista } from './world/autopista.js';
 import { Paisaje } from './world/paisaje.js';
 import { Trafico } from './traffic/trafico.js';
+import { Persecucion, PERSECUCION } from './game/persecucion.js';
+import { FRASES, una } from './ui/frases.js';
 import { Carrera, ESTADO, VENTANA_COMBO } from './game/carrera.js';
 import { afinarTexturas } from './core/texturas.js';
 import { DirectorCamara } from './camera/director.js';
@@ -133,7 +135,9 @@ const audio = new EngineAudio();
 audio.enabled = prefs.sonido;
 
 let vehicle, loop, hud, sun, fx, director, ciudad = null, tactil = null, escala = null;
-let autopista = null, paisaje = null, trafico = null, carrera = null;
+let autopista = null, paisaje = null, trafico = null, carrera = null, persecucion = null;
+/** Avisos que solo salen una vez por partida (velocidades, dano). */
+const yaDicho = new Set();
 let world = null;
 /** @type {'carga'|'menu'|'cuenta'|'juego'|'pausa'|'fin'} */
 let estado = 'carga';
@@ -182,6 +186,7 @@ async function main() {
     boot('Llenando la vía de tráfico…', 0.26);
     await new Promise(r => setTimeout(r, 16));
     trafico = new Trafico(scene, RAPIER, world, { fisico: CAL.pinturaLaca, sombras: CAL.nombre === 'alta' });
+    persecucion = new Persecucion(scene, trafico.material);
     carrera = new Carrera();
     spawn = autopista.puntoDeSalida();
     const cielo = instalarCielo(renderer, scene, {
@@ -286,7 +291,7 @@ async function main() {
 
   window.HR = {
     vehicle, scene, camera, renderer, world, RAPIER, steering, engine, input, loop, audio, fx, ciudad,
-    director, autopista, trafico, carrera, paisaje, tactil, CAL,
+    director, autopista, trafico, carrera, paisaje, tactil, CAL, persecucion,
     reiniciar, empezar, get estado() { return estado; }, get telemetria() { return tel; },
     pintar: () => renderer.render(scene, camera),
   };
@@ -449,6 +454,7 @@ function alChocar(contra, p) {
   audio.choque(0.4 + f * 0.6);
   director.sacudir(0.25 + f * 0.6);
   if (navigator.vibrate) navigator.vibrate([0, 220, 60, 90]);
+  fraseFin = una(FRASES.choque);
   estado = 'fin';
   input.conduccion = false;
   tLento = 1.1;
@@ -456,9 +462,23 @@ function alChocar(contra, p) {
   loop.escala = 0.28;
 }
 
+/** Lo detuvo la Policia o el Ejercito: dano al 100 %. */
+function alDetener() {
+  audio.golpe(1);
+  director.sacudir(0.35);
+  if (navigator.vibrate) navigator.vibrate([0, 300, 80, 300]);
+  fraseFin = una(FRASES.detenido);
+  estado = 'fin';
+  input.conduccion = false;
+  tLento = 1.1;
+  tFin = 1.5;
+  loop.escala = 0.35;
+}
+let fraseFin = '';
+
 async function compartir() {
   const pts = Math.round(carrera?.puntos ?? 0).toLocaleString('es-CO');
-  const texto = `Hice ${pts} puntos en JERO RACER esquivando tractomulas a ${Math.round(carrera?.velocidadMax ?? 0)} km/h. ¿Me ganas?`;
+  const texto = `Hice ${pts} puntos en JERO RACER esquivando tractomulas y a la tomba a ${Math.round(carrera?.velocidadMax ?? 0)} km/h. ¿Me ganas? Síguenos en TikTok: @jerofernandez222 y @TAKAMURA.0`;
   const url = 'https://jeroracer.axionasoft.com';
   try {
     if (navigator.share) { await navigator.share({ title: 'JERO RACER', text: texto, url }); return; }
@@ -548,7 +568,9 @@ function simular(dt) {
   const br = brakeM.update(frenar, dt);
   const out = engine.update(th, vehicle.driveWheelRads, dt);
 
-  vehicle.setControls(steer, out.torque, br, a.handbrake);
+  // Con el carro muy golpeado el motor rinde menos: asi se nota el dano.
+  const cojera = carrera ? 1 - 0.4 * Math.max(0, (carrera.danio - 55) / 45) : 1;
+  vehicle.setControls(steer, out.torque * cojera, br, a.handbrake);
   vehicle.estabilizar(dt, a.handbrake);
   vehicle.applyAero();
   vehicle.stepControls(dt);
@@ -601,10 +623,33 @@ function actualizarAutopista(dt, fwdKmh) {
   trafico.actualizar(dt, { x: p.x, z: p.z, velocidad: Math.max(0, fwdKmh / 3.6) });
 
   for (const ev of trafico.eventos) pendientes.push(ev);
-  if (estado !== 'juego') return;
 
   const q = vehicle.body.rotation();
   const yaw = Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.z * q.z));
+  const enJuego = estado === 'juego' && carrera.estado === ESTADO.RODANDO;
+  persecucion.actualizar(dt, {
+    x: p.x, z: p.z, velocidad: Math.max(0, fwdKmh / 3.6), kmh: fwdKmh, yaw,
+    largo: CAJA_JUGADOR.largo, ancho: CAJA_JUGADOR.ancho,
+  }, trafico, enJuego);
+  carrera.enPersecucion = persecucion.activa;
+  for (const ev of persecucion.eventos) {
+    // Lo fisico se aplica aqui, dentro del paso; lo de la interfaz, al pintar.
+    if (ev.tipo === 'golpe' && enJuego) {
+      const m = vehicle.mass;
+      vehicle.body.applyImpulse({ x: ev.lado * m * (1.0 + ev.fuerza * 0.045), y: 0, z: 0 }, true);
+      const w = vehicle.body.angvel();
+      vehicle.body.setAngvel({ x: w.x, y: w.y + ev.lado * 0.35, z: w.z }, true);
+      if (carrera.danar(ev.fuerza, ev.militar ? 'el Ejército' : 'la Policía')) alDetener();
+    } else if (ev.tipo === 'disparo' && ev.acierta && enJuego) {
+      if (carrera.danar(PERSECUCION.danoBala, ev.militar ? 'el Ejército' : 'la Policía')) alDetener();
+    } else if (ev.tipo === 'fin') {
+      ev.bono = carrera.bonoEscape(ev.duracion);
+    }
+    pendientes.push({ persecucion: ev });
+  }
+  persecucion.eventos.length = 0;
+  if (estado !== 'juego') return;
+
   const choque = carrera.estado === ESTADO.RODANDO
     ? trafico.choqueCon({ x: p.x, z: p.z, yaw, largo: CAJA_JUGADOR.largo, ancho: CAJA_JUGADOR.ancho })
     : null;
@@ -618,6 +663,7 @@ function actualizarAutopista(dt, fwdKmh) {
 function presentar(alpha, dt) {
   vehicle.render(alpha);
   if (trafico) trafico.presentar(alpha);
+  if (persecucion) persecucion.presentar(alpha, dt);
   escala?.medir(dt);
 
   // --- teclado de interfaz ---------------------------------------------------
@@ -671,8 +717,9 @@ function presentar(alpha, dt) {
       if (tFin <= 0) {
         if (tactil) tactil.mostrar(false);
         ui.mostrarFin({
+          motivo: carrera.motivo, frase: fraseFin,
           recordBatido: carrera.recordBatido,
-          contra: articulo(carrera.choqueCon),
+          contra: carrera.motivo === 'detenido' ? carrera.choqueCon : articulo(carrera.choqueCon),
           velocidadChoque: carrera.velocidadAlChocar,
           puntos: carrera.puntos, km: carrera.km,
           rozones: carrera.rozones, mejorCombo: carrera.mejorCombo,
@@ -686,18 +733,30 @@ function presentar(alpha, dt) {
   // --- eventos de la fisica: sonido de paso y bonos ------------------------------
   while (pendientes.length) {
     const ev = pendientes.shift();
+    if (ev.persecucion) { avisoPersecucion(ev.persecucion); continue; }
     const cerca = Math.max(0, (3 - ev.hueco) / 3);
     audio.paso(ev.lado, cerca * Math.min(1, Math.abs(ev.relativa) / 30), ev.pesado);
     if (ev.bono) {
       audio.bono(ev.bono.combo);
       if (navigator.vibrate) navigator.vibrate(18);
-      ui.aviso(ev.bono.combo > 1 ? `¡ROZÓN x${ev.bono.combo}!` : '¡ROZÓN!', `+${ev.bono.bono} · ${ev.tipo.nombre}`);
+      const c = ev.bono.combo;
+      const titulo = c >= 5 ? una(FRASES.combo5) : c >= 3 ? una(FRASES.combo3) : una(FRASES.rozon);
+      ui.aviso(titulo, `+${ev.bono.bono}${c > 1 ? ` · combo x${c}` : ''} · ${ev.tipo.nombre}`);
     }
   }
   if (carrera && carrera.recordBatido && !avisoRecord && estado === 'juego') {
     avisoRecord = true;
-    ui.aviso('¡NUEVO RÉCORD!', 'sigue así', 'ambar');
+    ui.aviso(una(FRASES.record), 'sigue así', 'ambar');
   }
+  if (carrera && estado === 'juego' && tel) {
+    for (const v of [150, 200, 240]) {
+      if (tel.speed >= v && !yaDicho.has('v' + v)) { yaDicho.add('v' + v); ui.aviso(FRASES.velocidad[v], `${v} km/h`, 'ambar'); }
+    }
+    if (carrera.danio >= 50 && !yaDicho.has('d50')) { yaDicho.add('d50'); ui.aviso('¡ESO VA A SALIR CARO, MIJO!', 'daño 50 %', 'rojo'); }
+    if (carrera.danio >= 80 && !yaDicho.has('d80')) { yaDicho.add('d80'); ui.aviso('¡EL CARRO YA NO DA MÁS!', 'un golpe más y lo detienen', 'rojo'); }
+  }
+  sonidoPersecucion();
+  humoDeDanio(dt);
 
   if (tel) {
     fx.update(tel, dt);
@@ -722,7 +781,93 @@ function presentar(alpha, dt) {
       record: Math.max(carrera.recordPuntos, carrera.puntos),
       vel: tel.speed, marcha: String(tel.gear), rpm01: engine.normalizedRPM ?? 0,
       combo: carrera.combo, combo01: carrera.tCombo / VENTANA_COMBO,
+      persecucion: persecucion?.activa && estado === 'juego', danio: carrera.danio,
+      distanciaPatrulla: persecucion?.activa ? persecucion.cercana.distancia : Infinity,
     }, dt);
+  }
+}
+
+/** Avisos, sonido y efectos de cada evento de la persecucion. */
+function avisoPersecucion(ev) {
+  switch (ev.tipo) {
+    case 'inicio':
+      ui.aviso(una(FRASES.persecucion), 'baje de 170 km/h para que lo dejen', 'rojo');
+      break;
+    case 'fin':
+      if (estado === 'juego') ui.aviso(una(FRASES.escape), ev.bono ? `+${ev.bono} por la persecución` : 'lo dejaron', 'ambar');
+      break;
+    case 'ejercito':
+      ui.aviso(una(FRASES.ejercito), 'esto se puso serio, mijo', 'rojo');
+      break;
+    case 'helicoptero':
+      ui.aviso(una(FRASES.helicoptero), 'helicóptero de la Policía', 'rojo');
+      break;
+    case 'megafono':
+      ui.aviso(una(FRASES.megafono), '📢 megáfono', 'rojo');
+      break;
+    case 'tiroteo':
+      ui.aviso(una(FRASES.tiroteo), '¡le están disparando!', 'rojo');
+      break;
+    case 'golpe': {
+      audio.golpe(ev.fuerza / 34);
+      director.sacudir(0.1 + ev.fuerza * 0.008);
+      if (navigator.vibrate) navigator.vibrate(60);
+      for (let i = 0; i < 26; i++) {
+        fx.chispas.emit(ev.x + (Math.random() - 0.5) * 0.6, 0.5 + Math.random() * 0.6, ev.z + (Math.random() - 0.5) * 2,
+          (Math.random() - 0.5) * 8, 1 + Math.random() * 3, (Math.random() - 0.5) * 6,
+          0.3 + Math.random() * 0.4, 0.05 + Math.random() * 0.04, 2.4, 1.2, 0.3);
+      }
+      ui.aviso(una(FRASES.golpe), `daño ${Math.round(carrera.danio)} %`, 'rojo');
+      break;
+    }
+    case 'disparo': {
+      audio.disparo(ev.distancia, -Math.sign(ev.boca.x - vehicle.body.translation().x));
+      // Fogonazo en la boca del arma.
+      for (let i = 0; i < 6; i++) {
+        fx.llama.emit(ev.boca.x, ev.boca.y, ev.boca.z, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 3 + Math.random() * 4,
+          0.04 + Math.random() * 0.03, 0.18 + Math.random() * 0.12, 2.2, 1.6, 0.5);
+      }
+      if (ev.acierta) {
+        for (let i = 0; i < 8; i++) {
+          fx.chispas.emit(ev.destino.x, ev.destino.y, ev.destino.z, (Math.random() - 0.5) * 6, Math.random() * 3, (Math.random() - 0.5) * 6,
+            0.2 + Math.random() * 0.3, 0.04 + Math.random() * 0.03, 2.4, 1.4, 0.4);
+        }
+        director.sacudir(0.04);
+      }
+      break;
+    }
+  }
+}
+
+/** Sirena y helicoptero segun lo cerca que esten. */
+function sonidoPersecucion() {
+  if (!persecucion || !audio.ready) return;
+  const c = persecucion.cercana;
+  const sirena = Number.isFinite(c.distancia) ? Math.max(0, 1 - c.distancia / 260) : 0;
+  // +X es la izquierda del coche y, con la camara detras, la izquierda de la pantalla.
+  audio.sirena(estado === 'pausa' ? 0 : sirena, -c.lado, c.distancia < 30);
+  let heli = 0;
+  if (persecucion.heliActivo) {
+    const h = persecucion.heliPos, p = vehicle.body.translation();
+    heli = Math.max(0, 1 - Math.hypot(h.x - p.x, h.y - p.y, h.z - p.z) / 180);
+  }
+  audio.helicoptero(heli);
+}
+
+/** Humo del capo cuando el carro esta muy golpeado. */
+let acumHumoDanio = 0;
+function humoDeDanio(dt) {
+  if (!carrera || carrera.danio < 40 || !fx) return;
+  const k = (carrera.danio - 40) / 60;
+  acumHumoDanio += dt * (6 + k * 30);
+  const b = vehicle.bodyRoot;
+  const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(b.quaternion);
+  while (acumHumoDanio >= 1) {
+    acumHumoDanio -= 1;
+    const tono = 0.62 - 0.48 * k;
+    fx.humo.emit(b.position.x + fwd.x * 1.5 + (Math.random() - 0.5) * 0.6, b.position.y + 0.85, b.position.z + fwd.z * 1.5,
+      -fwd.x * 2 + (Math.random() - 0.5), 1.2 + Math.random(), -fwd.z * 2 + (Math.random() - 0.5),
+      0.9 + Math.random() * 0.8, 0.5 + k * 0.7, tono, tono, tono);
   }
 }
 
@@ -760,6 +905,8 @@ function reiniciar() {
     paisaje.actualizar(SPAWN.z);
     trafico.reiniciar(SPAWN.z, SPAWN.x);
     carrera.reiniciar(SPAWN.z);
+    persecucion.reiniciar();
+    yaDicho.clear();
   }
   vehicle.respawn(SPAWN, 0);
   tiempoVolcado = 0;

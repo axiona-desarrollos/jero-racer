@@ -164,14 +164,17 @@ function texturaLetrero(lineas, { ancho = 640, alto = 240, fondo = '#0b6b3a', fl
 function texturaLED(lineas, { ancho = 640, alto = 240 } = {}) {
   // El texto se dibuja primero a la resolucion de la matriz de LED y despues
   // cada celda encendida se pinta como un punto.
-  const cols = 96, filas = 36;
+  // Mas columnas para textos largos (las cuentas de TikTok): con 96 una
+  // arroba de 17 letras salia ilegible.
+  const largo = Math.max(...lineas.map(l => l.length));
+  const cols = Math.max(96, Math.min(150, largo * 7)), filas = Math.round(cols * 0.375);
   const m = document.createElement('canvas');
   m.width = cols; m.height = filas;
   const gm = m.getContext('2d');
   gm.fillStyle = '#000'; gm.fillRect(0, 0, cols, filas);
   gm.fillStyle = '#fff'; gm.textAlign = 'center'; gm.textBaseline = 'middle';
   const n = lineas.length;
-  const tam = n === 1 ? 20 : 15;
+  const tam = Math.round(filas * (n === 1 ? 0.56 : 0.42));
   for (let i = 0; i < n; i++) {
     let t = tam;
     do { gm.font = `bold ${t}px Arial, sans-serif`; t--; } while (gm.measureText(lineas[i]).width > cols - 4 && t > 6);
@@ -480,10 +483,12 @@ export class Paisaje {
       [V([['Itagüí', '2 km'], ['Medellín', '11 km']]), L(['AVE MARÍA,', 'PUES'])],
       [L(['¿QUÉ MÁS,', 'PUES?']), V([['Caldas', '20 km'], ['Sabaneta', '8 km']])],
       [V([['Aranjuez']], { flecha: -0.6 }), L(['DE UNA,', 'PARCERO'])],
+      [L(['SÍGUEME EN TIKTOK', '@JEROFERNANDEZ222']), V([['Sabaneta']], { flecha: 0.6 })],
+      [V([['Medellín', '10 km'], ['Itagüí', '4 km']]), L(['SÍGUENOS EN TIKTOK', '@TAKAMURA.0'])],
     ];
     this._letreros = new Map();
     this.porticos = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
       const g = new THREE.Group();
       const estructura = new THREE.Mesh(geoPortico, matPieza);
       estructura.castShadow = true;
@@ -504,7 +509,6 @@ export class Paisaje {
       this.grupo.add(g);
       this.porticos.push(g);
     }
-    this.cadaPortico = 1100;
 
     // --- vallas al borde de la via ---------------------------------------------
     // Frases paisas y los anuncios de la flota, a la derecha tras la defensa.
@@ -520,11 +524,16 @@ export class Paisaje {
       F('¡AVE MARÍA, PUES!', 'QUÉ VELOCIDAD TAN TESA', ['#00c7be', '#0a84ff']),
       F('¡HÁGALE PUES!', 'QUE LA AUTOPISTA ES SUYA', ['#ff9f0a', '#ff375f']),
       F('¿BIEN O QUÉ, PARCERO?', 'JERO RACER · jeroracer.axionasoft.com', ['#111827', '#00b3a4', '#00f0c0']),
+      A(PUB.mulaJero),
+      F('¡QUÉ NIVEL, MIJO!', 'SÍGUEME EN TIKTOK · @jerofernandez222', ['#0b0b12', '#fe2c55', '#25f4ee']),
+      A(PUB.traseraTakamura),
+      F('¡ESO ES TODO, PARCE!', 'SÍGUENOS EN TIKTOK · @TAKAMURA.0', ['#a50f1a', '#d61a26', '#ffd23f']),
+      A(PUB.traseraJero),
     ];
     this._vallas = new Map();
     const geoValla = geometriaValla();
     this.vallas = [];
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 5; i++) {
       const g = new THREE.Group();
       const estructura = new THREE.Mesh(geoValla, matPieza);
       estructura.castShadow = true;
@@ -535,22 +544,32 @@ export class Paisaje {
       panel.rotation.y = Math.PI;
       g.add(panel);
       g.userData.mat = mat;
-      // A la derecha, girada hacia el conductor que viene por la via.
-      g.rotation.y = -0.32;
       this.grupo.add(g);
       this.vallas.push(g);
     }
-    this.cadaValla = 1300;
 
     const geoPuente = geometriaPuente(anchoTotal() + 12);
+    // Pancarta de TikTok colgada en la baranda, de cara al que llega.
+    const lienzo = document.createElement('canvas');
+    lienzo.width = 2048; lienzo.height = 120;
+    PUB.pancartaPuente(lienzo.getContext('2d'), [0, 0, 2048, 120]);
+    const texPancarta = new THREE.CanvasTexture(lienzo);
+    texPancarta.colorSpace = THREE.SRGBColorSpace;
+    texPancarta.anisotropy = 8;
+    const matPancarta = new THREE.MeshStandardMaterial({ map: texPancarta, emissive: 0xffffff, emissiveMap: texPancarta, emissiveIntensity: 0.15, roughness: 0.6 });
     this.puentes = [];
     for (let i = 0; i < 2; i++) {
+      const g = new THREE.Group();
       const m = new THREE.Mesh(geoPuente, matPieza);
       m.castShadow = true; m.receiveShadow = true;
-      this.grupo.add(m);
-      this.puentes.push(m);
+      g.add(m);
+      const pancarta = new THREE.Mesh(new THREE.PlaneGeometry(26, 1.52), matPancarta);
+      pancarta.position.set(0, 8.55, -5.42);
+      pancarta.rotation.y = Math.PI;
+      g.add(pancarta);
+      this.grupo.add(g);
+      this.puentes.push(g);
     }
-    this.cadaPuente = 2900;
 
     this._m4 = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
@@ -610,6 +629,74 @@ export class Paisaje {
     });
   }
 
+  /**
+   * PORTICOS, VALLAS Y PUENTES COMPARTEN UN SOLO CALENDARIO.
+   *
+   * Antes cada uno llevaba su propio periodo (1100, 1300 y 2900 m) y de vez
+   * en cuando un letrero caia justo detras de un puente: el tablero lo tapaba
+   * hasta pasar por debajo. Ahora la via se parte en huecos de 550 m y un
+   * ciclo fijo dice que va en cada uno; detras de cada puente hay un hueco
+   * vacio, asi que lo siguiente que se ve esta a mas de un kilometro.
+   */
+  #colocarPiezas(z) {
+    const HUECO = 550;
+    // P = portico, D/I = valla derecha/izquierda, B = puente, - = nada
+    const CICLO = ['P', 'D', 'P', 'I', 'B', '-', 'D', 'P', 'I', 'P'];
+    const ciclo = (n, len) => ((n % len) + len) % len;
+    // Numero de orden de cada pieza de un tipo (el 1er portico, el 2o...). Con
+    // el numero de hueco a pelo, como el ciclo y la lista de letreros miden
+    // lo mismo, varios letreros no salian nunca.
+    const ordinal = (n, tipos) => {
+      const vuelta = Math.floor(n / CICLO.length), pos = ciclo(n, CICLO.length);
+      const porVuelta = CICLO.filter(t => tipos.includes(t)).length;
+      let antes = 0;
+      for (let i = 0; i < pos; i++) if (tipos.includes(CICLO[i])) antes++;
+      return vuelta * porVuelta + antes;
+    };
+    const n0 = Math.floor(z / HUECO) - 1;
+    const quiero = { P: [], V: [], B: [] };
+    for (let n = n0; n <= n0 + 6; n++) {
+      const t = CICLO[ciclo(n, CICLO.length)];
+      if (t === 'P') quiero.P.push(n); else if (t === 'B') quiero.B.push(n); else if (t !== '-') quiero.V.push(n);
+    }
+    // Cada pieza conserva su hueco mientras siga en la ventana; las libres
+    // toman los huecos nuevos. Asi no se repinta nada que ya este a la vista.
+    const repartir = (pool, huecos, colocar) => {
+      const pendientes = new Set(huecos);
+      const libres = [];
+      for (const g of pool) {
+        if (g.userData.hueco != null && pendientes.has(g.userData.hueco)) pendientes.delete(g.userData.hueco);
+        else libres.push(g);
+      }
+      for (const n of pendientes) {
+        const g = libres.shift();
+        if (!g) break;
+        g.userData.hueco = n;
+        g.visible = true;
+        colocar(g, n, n * HUECO + 300);
+      }
+      for (const g of libres) { g.visible = false; g.userData.hueco = null; }
+    };
+    repartir(this.porticos, quiero.P, (g, n, zs) => {
+      g.position.set(0, 0, zs);
+      const j = ciclo(ordinal(n, ['P']), this.juegosLetreros.length);
+      if (!this._letreros.has(j)) this._letreros.set(j, this.juegosLetreros[j].map(crear => crear()));
+      const juego = this._letreros.get(j);
+      g.userData.paneles.forEach((m, i) => { m.map = juego[i]; m.emissiveMap = juego[i]; m.needsUpdate = true; });
+    });
+    repartir(this.vallas, quiero.V, (g, n, zs) => {
+      const lado = CICLO[ciclo(n, CICLO.length)] === 'D' ? -1 : 1;
+      // Girada hacia el conductor que viene por la via.
+      g.position.set(lado * (this.borde + 11), 0, zs);
+      g.rotation.y = lado * 0.32;
+      const j = ciclo(ordinal(n, ['D', 'I']), this.juegosVallas.length);
+      if (!this._vallas.has(j)) this._vallas.set(j, this.juegosVallas[j]());
+      const t = this._vallas.get(j);
+      g.userData.mat.map = t; g.userData.mat.emissiveMap = t; g.userData.mat.needsUpdate = true;
+    });
+    repartir(this.puentes, quiero.B, (g, n, zs) => g.position.set(0, 0, zs));
+  }
+
   /** @param {number} z posicion del jugador a lo largo de la via */
   actualizar(z) {
     const pT = this.periodoTerreno;
@@ -622,36 +709,6 @@ export class Paisaje {
       this.#plantar(base);
     }
 
-    // Porticos: el anterior por detras y los dos proximos por delante.
-    const ciclo = (n, len) => ((n % len) + len) % len;
-    const iP = Math.floor(z / this.cadaPortico) - 1;
-    this.porticos.forEach((g, k) => {
-      const n = iP + k;
-      const zp = n * this.cadaPortico + 700;
-      if (g.position.z !== zp) {
-        g.position.set(0, 0, zp);
-        const j = ciclo(n, this.juegosLetreros.length);
-        if (!this._letreros.has(j)) this._letreros.set(j, this.juegosLetreros[j].map(crear => crear()));
-        const juego = this._letreros.get(j);
-        g.userData.paneles.forEach((m, i) => { m.map = juego[i]; m.emissiveMap = juego[i]; m.needsUpdate = true; });
-      }
-    });
-    const iV = Math.floor(z / this.cadaValla);
-    this.vallas.forEach((g, k) => {
-      const n = iV + k;
-      const zv = n * this.cadaValla + 600;
-      if (g.position.z !== zv) {
-        g.position.set(-(this.borde + 11), 0, zv);
-        const j = ciclo(n, this.juegosVallas.length);
-        if (!this._vallas.has(j)) this._vallas.set(j, this.juegosVallas[j]());
-        const t = this._vallas.get(j);
-        g.userData.mat.map = t; g.userData.mat.emissiveMap = t; g.userData.mat.needsUpdate = true;
-      }
-    });
-    const iB = Math.floor(z / this.cadaPuente);
-    this.puentes.forEach((m, k) => {
-      const zb = (iB + k) * this.cadaPuente + 1500;
-      if (m.position.z !== zb) m.position.set(0, 0, zb);
-    });
+    this.#colocarPiezas(z);
   }
 }

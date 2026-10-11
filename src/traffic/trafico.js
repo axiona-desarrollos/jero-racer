@@ -127,7 +127,7 @@ export function aceleracionIDM(v, v0, hueco, dv, a) {
 }
 
 /** Textura de sombra de contacto: rectangulo de bordes muy difuminados. */
-function texturaSombra() {
+export function texturaSombra() {
   const s = 128;
   const c = document.createElement('canvas');
   c.width = c.height = s;

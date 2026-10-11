@@ -291,3 +291,73 @@ export function busPublicidad(g, r) {
   g.fillStyle = '#ffffff';
   g.fillText('@jerofernandez222', x0, p.y + p.h * 0.7);
 }
+
+// ----------------------------------------------------- persecucion
+/** Franja de puertas de la Policia Nacional: verde, POLICIA y el 123. */
+export function franjaPolicia(g, r) {
+  const p = caja(r);
+  g.fillStyle = '#00843d'; g.fillRect(p.x, p.y, p.w, p.h);
+  g.fillStyle = '#ffffff';
+  g.fillRect(p.x, p.y + p.h * 0.06, p.w, p.h * 0.06);
+  g.fillRect(p.x, p.y + p.h * 0.88, p.w, p.h * 0.06);
+  g.textBaseline = 'middle'; g.textAlign = 'left';
+  g.font = `400 ${Math.round(p.h * 0.62)}px ${TITULO}`;
+  g.fillText('POLICÍA', p.x + p.h * 0.6, p.y + p.h * 0.52);
+  g.textAlign = 'right';
+  g.font = `700 ${Math.round(p.h * 0.5)}px ${TEXTO}`;
+  g.fillText('NACIONAL · 123', p.x + p.w - p.h * 0.6, p.y + p.h * 0.53);
+}
+
+/** Rotulo del Ejercito Nacional en verde oliva. */
+export function franjaEjercito(g, r) {
+  const p = caja(r);
+  g.fillStyle = '#4a5130'; g.fillRect(p.x, p.y, p.w, p.h);
+  g.fillStyle = '#f2e9c9';
+  g.textBaseline = 'middle'; g.textAlign = 'center';
+  g.font = `400 ${Math.round(p.h * 0.6)}px ${TITULO}`;
+  g.fillText('EJÉRCITO NACIONAL', p.x + p.w / 2, p.y + p.h * 0.52);
+}
+
+/** Anuncio de Takamura para el costado del bus. */
+export function busTakamura(g, r) {
+  const p = caja(r);
+  fondoTakamura(g, p);
+  g.textBaseline = 'middle'; g.textAlign = 'left';
+  const tamCJK = ajustar(g, '高村', p.w * 0.22, Math.round(p.h * 0.7), CJK, '900');
+  g.font = `900 ${tamCJK}px ${CJK}`;
+  g.fillStyle = '#ffd23f';
+  g.fillText('高村', p.x + p.h * 0.25, p.y + p.h * 0.52);
+  notaTikTok(g, p.x + p.w * 0.33, p.y + p.h * 0.5, Math.round(p.h * 0.55));
+  const x0 = p.x + p.w * 0.4;
+  g.fillStyle = '#ffffff';
+  ajustar(g, 'SÍGUENOS EN TIKTOK', p.x + p.w - x0 - p.h * 0.2, Math.round(p.h * 0.22), TEXTO, '700');
+  g.fillText('SÍGUENOS EN TIKTOK', x0, p.y + p.h * 0.3);
+  const tam = ajustar(g, '@TAKAMURA.0', p.x + p.w - x0 - p.h * 0.2, Math.round(p.h * 0.42), TITULO, '400');
+  g.font = `400 ${tam}px ${TITULO}`;
+  g.fillText('@TAKAMURA.0', x0, p.y + p.h * 0.68);
+}
+
+/**
+ * Pancarta larga para colgar en los puentes: las dos cuentas de TikTok.
+ * Se dibuja en su propio canvas (no en el atlas): es muy alargada.
+ */
+export function pancartaPuente(g, r) {
+  const p = caja(r);
+  g.fillStyle = '#0b0b12'; g.fillRect(p.x, p.y, p.w, p.h);
+  const mitad = p.x + p.w / 2;
+  // Mitad roja de Takamura a la derecha.
+  const grd = g.createLinearGradient(mitad, 0, p.x + p.w, 0);
+  grd.addColorStop(0, '#a50f1a'); grd.addColorStop(1, '#d61a26');
+  g.fillStyle = grd; g.fillRect(mitad, p.y, p.w / 2, p.h);
+  g.textBaseline = 'middle'; g.textAlign = 'center';
+  notaTikTok(g, p.x + p.h * 0.7, p.y + p.h * 0.5, Math.round(p.h * 0.8));
+  let tam = ajustar(g, 'SÍGUEME EN TIKTOK @jerofernandez222', p.w * 0.42, Math.round(p.h * 0.6), TITULO, '400');
+  g.font = `400 ${tam}px ${TITULO}`;
+  g.fillStyle = '#ffffff';
+  g.fillText('SÍGUEME EN TIKTOK @jerofernandez222', p.x + p.w * 0.27, p.y + p.h * 0.54);
+  notaTikTok(g, mitad + p.h * 0.7, p.y + p.h * 0.5, Math.round(p.h * 0.8));
+  tam = ajustar(g, '高村 · @TAKAMURA.0', p.w * 0.38, Math.round(p.h * 0.6), `${TITULO},${CJK}`, '400');
+  g.font = `400 ${tam}px ${TITULO},${CJK}`;
+  g.fillStyle = '#ffd23f';
+  g.fillText('高村 · @TAKAMURA.0', mitad + p.w * 0.27, p.y + p.h * 0.54);
+}

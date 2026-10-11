@@ -24,6 +24,8 @@ export class Interfaz {
       avisos: $('#avisos'), mRecord: $('#mRecord'), mAyuda: $('#mAyuda'),
       oSonido: $('#oSonido'), oDireccion: $('#oDireccion'), oCamara: $('#oCamara'),
       bSonido: $('#bSonido'),
+      persecucion: $('#hPersecucion'), danio: $('#hDanio'), danioB: $('#hDanioB'),
+      persSub: $('#hPersecucion small'),
     };
     this._ult = {};
     this._acc = 0;
@@ -61,9 +63,9 @@ export class Interfaz {
       : 'Rompe tu primer récord';
     this.n.mAyuda.innerHTML = movil
       ? (modoDireccion === 'inclinar'
-        ? '<b>Inclina el teléfono</b> como un timón para girar. <b>GAS</b> a la derecha, <b>FRENO</b> a la izquierda y <b>F. MANO</b> para derrapar. Pasa rozando los carros para sumar <b>combos</b>.'
-        : '<b>◀ ▶</b> para girar, <b>GAS</b> y <b>FRENO</b> a la derecha, <b>F. MANO</b> para derrapar. Pasa rozando los carros para sumar <b>combos</b>.')
-      : '<b>W / ↑</b> acelerar · <b>S / ↓</b> frenar · <b>A D / ← →</b> girar · <b>ESPACIO</b> freno de mano · <b>C</b> cámara · <b>ESC</b> pausa · <b>M</b> sonido. Pasa rozando los carros para sumar <b>combos</b>. También con control de consola.';
+        ? '<b>Inclina el teléfono</b> como un timón para girar. <b>GAS</b> a la derecha, <b>FRENO</b> a la izquierda y <b>F. MANO</b> para derrapar. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía.'
+        : '<b>◀ ▶</b> para girar, <b>GAS</b> y <b>FRENO</b> a la derecha, <b>F. MANO</b> para derrapar. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía.')
+      : '<b>W / ↑</b> acelerar · <b>S / ↓</b> frenar · <b>A D / ← →</b> girar · <b>ESPACIO</b> freno de mano · <b>C</b> cámara · <b>ESC</b> pausa · <b>M</b> sonido. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía; baja de 170 para que te dejen. También con control de consola.';
     this.n.oDireccion.hidden = !movil;
     this.opciones({ modoDireccion, sonido, camara });
   }
@@ -108,6 +110,17 @@ export class Interfaz {
     this.#texto('vel', String(Math.round(d.vel)));
     this.#texto('marcha', d.marcha);
     this.n.rpm.style.width = `${Math.round(d.rpm01 * 100)}%`;
+    this.n.persecucion.hidden = !d.persecucion;
+    if (d.persecucion) {
+      const dist = d.distanciaPatrulla;
+      const txt = Number.isFinite(dist) ? (dist < 15 ? '¡LA TIENE ENCIMA!' : `PATRULLA A ${Math.round(dist)} m`) : 'baje de 170 km/h para que lo dejen';
+      this.#texto('persSub', txt);
+    }
+    this.n.danio.hidden = !(d.danio > 0);
+    if (d.danio > 0) {
+      this.n.danioB.style.width = `${Math.round(d.danio)}%`;
+      this.n.danio.classList.toggle('alto', d.danio >= 70);
+    }
     const enCombo = d.combo > 1;
     this.n.combo.classList.toggle('on', enCombo);
     if (enCombo) {
@@ -139,9 +152,13 @@ export class Interfaz {
   mostrarFin(r) {
     const f = this.n.fin;
     f.hidden = false;
-    f.classList.toggle('record', r.recordBatido);
-    $('#fTitulo').textContent = r.recordBatido ? '¡NUEVO RÉCORD!' : 'CHOCASTE';
-    $('#fDetalle').textContent = `Contra ${r.contra} a ${Math.round(r.velocidadChoque)} km/h`;
+    const detenido = r.motivo === 'detenido';
+    f.classList.toggle('record', r.recordBatido && !detenido);
+    f.classList.toggle('detenido', detenido);
+    $('#fTitulo').textContent = detenido ? '¡TE DETUVIERON!' : r.recordBatido ? '¡NUEVO RÉCORD!' : 'CHOCASTE';
+    $('#fDetalle').textContent = detenido
+      ? `${r.frase} · ${r.contra.charAt(0).toUpperCase() + r.contra.slice(1)} lo detuvo`
+      : `${r.frase} · Contra ${r.contra} a ${Math.round(r.velocidadChoque)} km/h`;
     $('#fPuntos').textContent = fmt(r.puntos);
     $('#fKm').textContent = r.km.toFixed(2);
     $('#fRozones').textContent = String(r.rozones);

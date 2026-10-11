@@ -2,7 +2,7 @@
    compilacion publica (vite.config solo compila index.html). */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { TIPOS, fabricar } from './traffic/flota.js';
+import { TIPOS, TIPOS_PERSECUCION, fabricar } from './traffic/flota.js';
 import { materialFlota, geometriaRueda, prepararInstancias } from './traffic/modelado.js';
 import { instalarCielo, alinearSol } from './world/cielo.js';
 
@@ -41,7 +41,7 @@ const geoCamion = geometriaRueda({ camion: true });
 const ruedasAuto = [], ruedasCamion = [];
 let x = 0;
 const filas = [];
-for (const tipo of TIPOS) {
+for (const tipo of [...TIPOS, ...Object.values(TIPOS_PERSECUCION)]) {
   const t0 = performance.now();
   const m = fabricar(tipo, new URLSearchParams(location.search).has('lejos') ? 0.35 : 1);
   const ms = performance.now() - t0;
@@ -51,7 +51,7 @@ for (const tipo of TIPOS) {
   inst.tinte1.setXYZ(0, col.r, col.g, col.b);
   const col2 = new THREE.Color((tipo.paleta2 ?? [0xeeeeee])[0]);
   inst.tinte2.setXYZ(0, col2.r, col2.g, col2.b);
-  inst.estado.setXYZ(0, 1, 1, 0);
+  inst.estado.setXYZ(0, 1, 1, 1);
   malla.castShadow = malla.receiveShadow = true;
   const pos = new THREE.Vector3(x + m.ancho / 2, 0, 0);
   malla.setMatrixAt(0, new THREE.Matrix4().makeTranslation(pos.x, 0, 0));

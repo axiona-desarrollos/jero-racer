@@ -470,6 +470,100 @@ export class EngineAudio {
   suspender() { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); }
   reanudar() { if (this.ctx && this.ctx.state === 'suspended' && this.enabled) this.ctx.resume(); }
 
+  // ------------------------------------------------------- PERSECUCION
+  #asegurarPersecucion() {
+    if (this._sirena || !this.ready) return;
+    const ctx = this.ctx;
+    // Sirena: diente de sierra filtrado y modulado. Lento = ulular ("wail"),
+    // rapido = "yelp", que es el que usan cuando ya estan encima.
+    const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 950;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.3;
+    const prof = ctx.createGain(); prof.gain.value = 380;
+    lfo.connect(prof); prof.connect(osc.frequency);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2300;
+    const g = ctx.createGain(); g.gain.value = 0;
+    let salida = g;
+    if (ctx.createStereoPanner) { this._panSirena = ctx.createStereoPanner(); g.connect(this._panSirena); salida = this._panSirena; }
+    osc.connect(lp); lp.connect(g); salida.connect(this.bus);
+    osc.start(); lfo.start();
+    this._sirena = { osc, lfo, prof, g };
+
+    // Helicoptero: ruido grave cortado a ~13 golpes por segundo.
+    const ruido = ctx.createBufferSource(); ruido.buffer = this.noiseBuf; ruido.loop = true;
+    const lpH = ctx.createBiquadFilter(); lpH.type = 'lowpass'; lpH.frequency.value = 280;
+    const chop = ctx.createGain(); chop.gain.value = 0.5;
+    const lfoH = ctx.createOscillator(); lfoH.type = 'square'; lfoH.frequency.value = 13;
+    const profH = ctx.createGain(); profH.gain.value = 0.5;
+    lfoH.connect(profH); profH.connect(chop.gain);
+    const gH = ctx.createGain(); gH.gain.value = 0;
+    ruido.connect(lpH); lpH.connect(chop); chop.connect(gH); gH.connect(this.bus);
+    ruido.start(); lfoH.start();
+    this._heli = gH;
+  }
+
+  /**
+   * @param {number} nivel 0..1 (0 = apagada)
+   * @param {number} lado -1 izquierda … +1 derecha de la pantalla
+   * @param {boolean} cerca yelp rapido en vez de ulular
+   */
+  sirena(nivel, lado = 0, cerca = false) {
+    if (!this.ready) return;
+    this.#asegurarPersecucion();
+    const now = this.ahora, s = this._sirena;
+    s.g.gain.setTargetAtTime(clamp(nivel, 0, 1) * 0.07, now, 0.15);
+    s.lfo.frequency.setTargetAtTime(cerca ? 3.4 : 0.3, now, 0.3);
+    s.prof.gain.setTargetAtTime(cerca ? 260 : 380, now, 0.3);
+    if (this._panSirena) this._panSirena.pan.setTargetAtTime(clamp(lado, -1, 1) * 0.6, now, 0.2);
+  }
+
+  /** @param {number} nivel 0..1 */
+  helicoptero(nivel) {
+    if (!this.ready) return;
+    this.#asegurarPersecucion();
+    this._heli.gain.setTargetAtTime(clamp(nivel, 0, 1) * 0.22, this.ahora, 0.3);
+  }
+
+  /** Embestida: chapa contra chapa. @param {number} fuerza 0..1 */
+  golpe(fuerza = 0.6) {
+    if (!this.ready) return;
+    const f = clamp(fuerza, 0.2, 1);
+    this.#burst(700, 0.32 * f, 0.28, 1.0);
+    this.#burst(2600, 0.12 * f, 0.14, 2.5);
+    this.#petardo(this.ahora + 0.005, 0.5 * f);
+  }
+
+  /**
+   * Disparo: chasquido seco y estampido grave, atenuado con la distancia.
+   * @param {number} distancia metros
+   * @param {number} lado -1 izquierda … +1 derecha
+   */
+  disparo(distancia = 20, lado = 0) {
+    if (!this.ready || !this.enabled) return;
+    const ctx = this.ctx, now = this.ahora;
+    const v = clamp(1.4 - distancia / 70, 0.15, 1);
+    let salida = this.busPetardos;
+    if (ctx.createStereoPanner) {
+      const p = ctx.createStereoPanner(); p.pan.value = clamp(lado, -1, 1) * 0.7;
+      p.connect(this.busPetardos); salida = p;
+    }
+    const s = ctx.createBufferSource(); s.buffer = this.blanco;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1900 + Math.random() * 900; bp.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.55 * v, now + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+    s.connect(bp); bp.connect(g); g.connect(salida);
+    s.start(now, Math.random() * 0.1); s.stop(now + 0.07);
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(140, now); o.frequency.exponentialRampToValueAtTime(50, now + 0.12);
+    const go = ctx.createGain();
+    go.gain.setValueAtTime(0.0001, now);
+    go.gain.exponentialRampToValueAtTime(0.45 * v, now + 0.004);
+    go.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+    o.connect(go); go.connect(salida);
+    o.start(now); o.stop(now + 0.16);
+  }
+
   setEnabled(on) {
     this.enabled = on;
     if (this.ready) this.master.gain.setTargetAtTime(on ? 0.9 : 0, this.ctx.currentTime, 0.08);
