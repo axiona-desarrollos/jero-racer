@@ -22,6 +22,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { anchoTotal } from './autopista.js';
+import * as PUB from '../traffic/publicidad.js';
 
 const TRAMO_ARBOLES = 400;
 
@@ -118,39 +119,159 @@ function atlasArboles() {
   return tex;
 }
 
-/** Letrero verde de autopista con hasta tres lineas. */
-function texturaLetrero(lineas, { ancho = 1024, alto = 384, fondo = '#0b6b3a', flecha = null } = {}) {
+/** Letrero verde de autopista con hasta tres lineas. Todo escala con el alto. */
+function texturaLetrero(lineas, { ancho = 640, alto = 240, fondo = '#0b6b3a', flecha = null } = {}) {
   const c = document.createElement('canvas');
   c.width = ancho; c.height = alto;
   const g = c.getContext('2d');
+  const k = alto / 384;
   g.fillStyle = fondo;
   g.fillRect(0, 0, ancho, alto);
-  g.strokeStyle = '#f1f1ea'; g.lineWidth = 12;
-  g.strokeRect(14, 14, ancho - 28, alto - 28);
+  g.strokeStyle = '#f1f1ea'; g.lineWidth = 12 * k;
+  g.strokeRect(14 * k, 14 * k, ancho - 28 * k, alto - 28 * k);
   g.fillStyle = '#f4f4ee';
   g.textBaseline = 'middle';
   const n = lineas.length;
+  const margenDer = flecha != null ? 200 * k : 54 * k;
   lineas.forEach((l, i) => {
-    const y = alto * ((i + 0.5) / n) + (n === 1 ? 0 : (i - (n - 1) / 2) * -6);
+    const y = alto * ((i + 0.5) / n) + (n === 1 ? 0 : (i - (n - 1) / 2) * -6 * k);
     g.font = `bold ${Math.round(alto / (n + 0.9))}px "Arial Narrow", Arial, sans-serif`;
     g.textAlign = 'left';
-    g.fillText(l[0], 54, y);
-    if (l[1]) { g.textAlign = 'right'; g.fillText(l[1], ancho - 54, y); }
+    g.fillText(l[0], 54 * k, y);
+    if (l[1]) { g.textAlign = 'right'; g.fillText(l[1], ancho - margenDer, y); }
   });
-  if (flecha) {
+  // OJO: una flecha recta es el angulo 0, que es falso. Antes "if (flecha)"
+  // dejaba sin flecha a todos los letreros de "siga derecho".
+  if (flecha != null) {
     g.save();
-    g.translate(ancho - 110, alto / 2);
+    g.translate(ancho - 110 * k, alto / 2);
     g.rotate(flecha);
+    g.scale(k, k);
     g.fillStyle = '#f4f4ee';
     g.beginPath();
     g.moveTo(0, -70); g.lineTo(46, -14); g.lineTo(16, -14); g.lineTo(16, 70);
     g.lineTo(-16, 70); g.lineTo(-16, -14); g.lineTo(-46, -14); g.closePath(); g.fill();
     g.restore();
   }
+  return texturaDe(c);
+}
+
+/**
+ * Panel de mensaje variable: LED ambar sobre negro, punto a punto. Es el
+ * letrero electronico de las autopistas; aqui en vez de "via congestionada"
+ * dice las frases del parche.
+ */
+function texturaLED(lineas, { ancho = 640, alto = 240 } = {}) {
+  // El texto se dibuja primero a la resolucion de la matriz de LED y despues
+  // cada celda encendida se pinta como un punto.
+  const cols = 96, filas = 36;
+  const m = document.createElement('canvas');
+  m.width = cols; m.height = filas;
+  const gm = m.getContext('2d');
+  gm.fillStyle = '#000'; gm.fillRect(0, 0, cols, filas);
+  gm.fillStyle = '#fff'; gm.textAlign = 'center'; gm.textBaseline = 'middle';
+  const n = lineas.length;
+  const tam = n === 1 ? 20 : 15;
+  for (let i = 0; i < n; i++) {
+    let t = tam;
+    do { gm.font = `bold ${t}px Arial, sans-serif`; t--; } while (gm.measureText(lineas[i]).width > cols - 4 && t > 6);
+    gm.fillText(lineas[i], cols / 2, filas * ((i + 0.5) / n) + 1);
+  }
+  const px = gm.getImageData(0, 0, cols, filas).data;
+
+  const c = document.createElement('canvas');
+  c.width = ancho; c.height = alto;
+  const g = c.getContext('2d');
+  g.fillStyle = '#060606'; g.fillRect(0, 0, ancho, alto);
+  const dx = ancho / cols, dy = alto / filas, r = Math.min(dx, dy) * 0.38;
+  for (let y = 0; y < filas; y++) {
+    for (let x = 0; x < cols; x++) {
+      const on = px[(y * cols + x) * 4] > 110;
+      g.fillStyle = on ? '#ffb11c' : '#1c1508';
+      g.beginPath(); g.arc((x + 0.5) * dx, (y + 0.5) * dy, r, 0, Math.PI * 2); g.fill();
+    }
+  }
+  g.strokeStyle = '#2a2d31'; g.lineWidth = alto * 0.04;
+  g.strokeRect(0, 0, ancho, alto);
+  return texturaDe(c, true);
+}
+
+/** Valla publicitaria de carretera con una frase paisa. colores = [desde, hasta, subtitulo] */
+function texturaValla(frase, sub, colores) {
+  const W = 768, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const grd = g.createLinearGradient(0, 0, W, H);
+  grd.addColorStop(0, colores[0]); grd.addColorStop(1, colores[1]);
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  // Rayos de fondo: el estilo de valla vistosa de carretera.
+  g.save(); g.globalAlpha = 0.12; g.fillStyle = '#ffffff';
+  for (let i = 0; i < 12; i++) {
+    g.beginPath(); g.moveTo(W * 0.15, H * 1.2);
+    g.lineTo(i * W / 11 - 40, -10); g.lineTo(i * W / 11 + 20, -10); g.closePath(); g.fill();
+  }
+  g.restore();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  let t = 92;
+  do { g.font = `400 ${t}px "Russo One","Arial Black",Arial,sans-serif`; t -= 2; } while (g.measureText(frase).width > W * 0.9 && t > 20);
+  g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillText(frase, W / 2 + 4, H * 0.44 + 4);
+  g.fillStyle = '#ffffff'; g.fillText(frase, W / 2, H * 0.44);
+  g.font = '700 30px Rajdhani,"Arial Narrow",Arial,sans-serif';
+  g.fillStyle = colores[2] ?? '#ffe14d';
+  g.fillText(sub, W / 2, H * 0.8);
+  return texturaDe(c);
+}
+
+/** Valla con un anuncio de la flota (los mismos disenos de los camiones). */
+function texturaAnuncio(dibujar) {
+  const W = 768, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  dibujar(c.getContext('2d'), [0, 0, W, H]);
+  return texturaDe(c);
+}
+
+function texturaDe(c, nitida = false) {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
+  // Los puntos del LED se emborronan con mipmaps lineales a media distancia;
+  // con el filtro mas cercano entre mipmaps se mantienen como puntos.
+  if (nitida) t.minFilter = THREE.LinearMipmapNearestFilter;
   return t;
+}
+
+/** Estructura de valla: dos postes, pasarela y marco, en una geometria. */
+function geometriaValla() {
+  const partes = [];
+  const pintar = (geo, hex) => {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    const col = new THREE.Color(hex);
+    const n = g.getAttribute('position').count;
+    const a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { a[i * 3] = col.r; a[i * 3 + 1] = col.g; a[i * 3 + 2] = col.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+    if (g.getAttribute('uv')) g.deleteAttribute('uv');
+    return g;
+  };
+  for (const x of [-3.4, 3.4]) {
+    const p = new THREE.CylinderGeometry(0.22, 0.26, 7.5, 10);
+    p.translate(x, 3.75, 0.3);
+    partes.push(pintar(p, 0x6f767e));
+  }
+  const marco = new THREE.BoxGeometry(12.6, 4.6, 0.35);
+  marco.translate(0, 8.9, 0.15);
+  partes.push(pintar(marco, 0x2c3036));
+  const pasarela = new THREE.BoxGeometry(12.2, 0.12, 1.0);
+  pasarela.translate(0, 6.5, -0.5);
+  partes.push(pintar(pasarela, 0x5d636a));
+  for (let x = -5.6; x <= 5.6; x += 2.8) {
+    const foco = new THREE.BoxGeometry(0.3, 0.2, 0.5);
+    foco.translate(x, 11.3, -0.6);
+    partes.push(pintar(foco, 0x1d2024));
+  }
+  return mergeGeometries(partes);
 }
 
 // ------------------------------------------------------------- montanas
@@ -345,13 +466,24 @@ export class Paisaje {
     const matPieza = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.15 });
     const luzPortico = anchoTotal() + 1.6;
     const geoPortico = geometriaPortico(luzPortico);
-    this.letreros = [
-      [texturaLetrero([['Medellín', '18 km'], ['Rionegro', '36 km']]), texturaLetrero([['Aeropuerto JMC']], { flecha: 0.6 })],
-      [texturaLetrero([['Sabaneta', '7 km'], ['Envigado', '11 km']]), texturaLetrero([['Bogotá']], { flecha: 0 })],
-      [texturaLetrero([['JERO RACER']], { fondo: '#101820' }), texturaLetrero([['Velocidad', 'máx 80'], ['Use cinturón', '']], { fondo: '#0b4f8a' })],
+    // Juegos de letreros de los porticos: destinos del Valle de Aburra y, de
+    // vez en cuando, un panel LED con una frase del parche. Se crean la
+    // primera vez que se necesitan y se guardan.
+    const V = (lineas, o) => () => texturaLetrero(lineas, o);
+    const L = lineas => () => texturaLED(lineas);
+    this.juegosLetreros = [
+      [V([['Aranjuez', '4 km'], ['Manrique', '6 km']]), V([['Medellín']], { flecha: 0 })],
+      [V([['Itagüí', '3 km'], ['Sabaneta', '9 km']]), V([['Caldas']], { flecha: 0.6 })],
+      [L(['¡QUÉ CHIMBA,', 'PARCE!']), V([['Medellín', '12 km'], ['Aranjuez', '15 km']])],
+      [V([['Sabaneta', '5 km'], ['Caldas', '14 km']]), L(['HÁBLALO,', 'MI SO'])],
+      [V([['Manrique']], { flecha: 0 }), L(['TODO BIEN,', 'MIJO'])],
+      [V([['Itagüí', '2 km'], ['Medellín', '11 km']]), L(['AVE MARÍA,', 'PUES'])],
+      [L(['¿QUÉ MÁS,', 'PUES?']), V([['Caldas', '20 km'], ['Sabaneta', '8 km']])],
+      [V([['Aranjuez']], { flecha: -0.6 }), L(['DE UNA,', 'PARCERO'])],
     ];
+    this._letreros = new Map();
     this.porticos = [];
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 3; i++) {
       const g = new THREE.Group();
       const estructura = new THREE.Mesh(geoPortico, matPieza);
       estructura.castShadow = true;
@@ -372,7 +504,43 @@ export class Paisaje {
       this.grupo.add(g);
       this.porticos.push(g);
     }
-    this.cadaPortico = 1700;
+    this.cadaPortico = 1100;
+
+    // --- vallas al borde de la via ---------------------------------------------
+    // Frases paisas y los anuncios de la flota, a la derecha tras la defensa.
+    const F = (frase, sub, colores) => () => texturaValla(frase, sub, colores);
+    const A = dibujar => () => texturaAnuncio(dibujar);
+    this.juegosVallas = [
+      F('¡QUÉ CHIMBA, PARCE!', 'MEDELLÍN · CIUDAD DE LA ETERNA PRIMAVERA', ['#ff2d55', '#ff9f0a']),
+      A(PUB.lateralAxionasoft),
+      F('HÁBLALO, MI SO', 'BIENVENIDO AL VALLE DE ABURRÁ', ['#0a84ff', '#30d158']),
+      A(PUB.lateralJero),
+      F('TODO BIEN, MIJO', 'ACÁ SE MANEJA CON BERRAQUERA', ['#5e2bff', '#ff2d95']),
+      A(PUB.lateralTakamura),
+      F('¡AVE MARÍA, PUES!', 'QUÉ VELOCIDAD TAN TESA', ['#00c7be', '#0a84ff']),
+      F('¡HÁGALE PUES!', 'QUE LA AUTOPISTA ES SUYA', ['#ff9f0a', '#ff375f']),
+      F('¿BIEN O QUÉ, PARCERO?', 'JERO RACER · jeroracer.axionasoft.com', ['#111827', '#00b3a4', '#00f0c0']),
+    ];
+    this._vallas = new Map();
+    const geoValla = geometriaValla();
+    this.vallas = [];
+    for (let i = 0; i < 2; i++) {
+      const g = new THREE.Group();
+      const estructura = new THREE.Mesh(geoValla, matPieza);
+      estructura.castShadow = true;
+      g.add(estructura);
+      const mat = new THREE.MeshStandardMaterial({ roughness: 0.55, emissive: 0xffffff, emissiveIntensity: 0.1 });
+      const panel = new THREE.Mesh(new THREE.PlaneGeometry(12, 4), mat);
+      panel.position.set(0, 8.9, -0.08);
+      panel.rotation.y = Math.PI;
+      g.add(panel);
+      g.userData.mat = mat;
+      // A la derecha, girada hacia el conductor que viene por la via.
+      g.rotation.y = -0.32;
+      this.grupo.add(g);
+      this.vallas.push(g);
+    }
+    this.cadaValla = 1300;
 
     const geoPuente = geometriaPuente(anchoTotal() + 12);
     this.puentes = [];
@@ -454,15 +622,30 @@ export class Paisaje {
       this.#plantar(base);
     }
 
-    // Porticos: el proximo por delante y el anterior por detras.
-    const iP = Math.floor(z / this.cadaPortico);
+    // Porticos: el anterior por detras y los dos proximos por delante.
+    const ciclo = (n, len) => ((n % len) + len) % len;
+    const iP = Math.floor(z / this.cadaPortico) - 1;
     this.porticos.forEach((g, k) => {
       const n = iP + k;
-      const zp = n * this.cadaPortico + 900;
+      const zp = n * this.cadaPortico + 700;
       if (g.position.z !== zp) {
         g.position.set(0, 0, zp);
-        const juego = this.letreros[((n % this.letreros.length) + this.letreros.length) % this.letreros.length];
-        g.userData.paneles.forEach((m, j) => { m.map = juego[j]; m.emissiveMap = juego[j]; m.needsUpdate = true; });
+        const j = ciclo(n, this.juegosLetreros.length);
+        if (!this._letreros.has(j)) this._letreros.set(j, this.juegosLetreros[j].map(crear => crear()));
+        const juego = this._letreros.get(j);
+        g.userData.paneles.forEach((m, i) => { m.map = juego[i]; m.emissiveMap = juego[i]; m.needsUpdate = true; });
+      }
+    });
+    const iV = Math.floor(z / this.cadaValla);
+    this.vallas.forEach((g, k) => {
+      const n = iV + k;
+      const zv = n * this.cadaValla + 600;
+      if (g.position.z !== zv) {
+        g.position.set(-(this.borde + 11), 0, zv);
+        const j = ciclo(n, this.juegosVallas.length);
+        if (!this._vallas.has(j)) this._vallas.set(j, this.juegosVallas[j]());
+        const t = this._vallas.get(j);
+        g.userData.mat.map = t; g.userData.mat.emissiveMap = t; g.userData.mat.needsUpdate = true;
       }
     });
     const iB = Math.floor(z / this.cadaPuente);

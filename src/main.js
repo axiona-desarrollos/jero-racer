@@ -167,6 +167,12 @@ async function main() {
 
   let spawn = null;
   if (ESCENA === 'autopista') {
+    // Rotulos de camiones y vallas se dibujan con estas fuentes: sin esperar,
+    // la primera partida los pintaria con la de respaldo.
+    await Promise.race([
+      Promise.all([document.fonts.load('64px "Russo One"'), document.fonts.load('bold 64px Rajdhani')]),
+      new Promise(r => setTimeout(r, 2500)),
+    ]).catch(() => {});
     boot('Tendiendo la autopista…', 0.14);
     await new Promise(r => setTimeout(r, 16));
     autopista = new Autopista(scene, RAPIER, world, renderer, { firme: CAL.firme });

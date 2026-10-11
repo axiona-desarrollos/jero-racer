@@ -6,6 +6,11 @@ import { TIPOS, fabricar } from './traffic/flota.js';
 import { materialFlota, geometriaRueda, prepararInstancias } from './traffic/modelado.js';
 import { instalarCielo, alinearSol } from './world/cielo.js';
 
+// Las calcomanias se dibujan con estas fuentes: hay que esperarlas.
+await Promise.race([
+  Promise.all([document.fonts.load('64px "Russo One"'), document.fonts.load('bold 64px Rajdhani')]),
+  new Promise(r => setTimeout(r, 3000)),
+]);
 const canvas = document.querySelector('#c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -52,7 +57,8 @@ for (const tipo of TIPOS) {
   malla.setMatrixAt(0, new THREE.Matrix4().makeTranslation(pos.x, 0, 0));
   scene.add(malla);
   for (const w of m.ruedas) (w.camion ? ruedasCamion : ruedasAuto).push({ ...w, cx: pos.x });
-  filas.push({ id: tipo.id, x: pos.x, largo: m.largo, ancho: m.ancho, alto: m.alto,
+  malla.userData.id = tipo.id;
+  filas.push({ id: tipo.id, malla, x: pos.x, largo: m.largo, ancho: m.ancho, alto: m.alto,
     tris: m.geometria.getAttribute('position').count / 3, ms: Math.round(ms) });
   x += m.ancho + 2.2;
 }
@@ -94,6 +100,20 @@ window.ver = (id, lado = 'frente', dist = 1) => {
   const zs = lado === 'frente' ? 1 : -1;
   camera.position.set(f.x + d * 0.42, f.alto * 0.9 + 0.7, zs * (f.largo / 2 + d * 0.95));
   controls.target.set(f.x, f.alto * 0.42, zs * f.largo * 0.08);
+  controls.update();
+};
+/** Deja solo un vehiculo a la vista (para mirar sus costados). */
+window.solo = (id) => {
+  for (const f of filas) f.malla.visible = !id || f.id === id;
+  scene.traverse(o => { if (o.isInstancedMesh && !o.userData.id) o.visible = !id; });
+};
+/** Vista de costado (lado +1 izquierdo, -1 derecho). */
+window.lado = (id, s = 1) => {
+  window.solo(id);
+  const f = filas.find(f => f.id === id);
+  const d = Math.max(f.largo, 4) * 0.95;
+  camera.position.set(f.x + s * d, f.alto * 0.7 + 0.4, -f.largo * 0.12);
+  controls.target.set(f.x, f.alto * 0.5, 0);
   controls.update();
 };
 window.foto = async (n) => {

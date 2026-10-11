@@ -28,6 +28,7 @@
    ========================================================================== */
 
 import * as THREE from 'three';
+import * as PUB from './publicidad.js';
 
 // ------------------------------------------------------------ nivel de detalle
 /**
@@ -78,7 +79,9 @@ export const conMat = (base, cambios) => ({ ...base, ...cambios });
  * rotulos de buses y camiones. La esquina (0,0)-(32,32) es blanca y es donde
  * apunta toda pieza sin calca, para que el mismo material sirva para todo.
  */
-const ATLAS = 1024;
+// 2048: la mitad derecha y la de abajo son de publicidad, que tiene que
+// leerse a la distancia de un adelantamiento.
+const ATLAS = 2048;
 export const REGION = Object.freeze({
   blanco:     [0, 0, 32, 32],
   placa:      [40, 0, 296, 128],
@@ -92,6 +95,17 @@ export const REGION = Object.freeze({
   parrilla:   [820, 0, 1024, 128],
   destino:    [0, 936, 512, 1000],
   destino2:   [516, 936, 1024, 1000],
+  // Publicidad (publicidad.js)
+  pubAxionasoft:  [1024, 0, 2048, 256],
+  pubTakamura:    [1024, 256, 2048, 512],
+  pubJero:        [1024, 512, 2048, 768],
+  pubBus:         [1024, 768, 2048, 928],
+  mulaAxionasoft: [0, 1024, 2048, 1408],
+  mulaJero:       [0, 1408, 2048, 1792],
+  trasAxionasoft: [0, 1792, 512, 2048],
+  trasTakamura:   [512, 1792, 1024, 2048],
+  trasJero:       [1024, 1792, 1536, 2048],
+  trasRacer:      [1536, 1792, 2048, 2048],
 });
 
 let atlasCache = null;
@@ -196,9 +210,20 @@ export function atlasCalcas() {
     g.fillText(txt, p.x + p.w / 2, p.y + p.h / 2 + 2);
   }
 
+  PUB.lateralAxionasoft(g, REGION.pubAxionasoft);
+  PUB.lateralTakamura(g, REGION.pubTakamura);
+  PUB.lateralJero(g, REGION.pubJero);
+  PUB.busPublicidad(g, REGION.pubBus);
+  PUB.mulaAxionasoft(g, REGION.mulaAxionasoft);
+  PUB.mulaJero(g, REGION.mulaJero);
+  PUB.traseraAxionasoft(g, REGION.trasAxionasoft);
+  PUB.traseraTakamura(g, REGION.trasTakamura);
+  PUB.traseraJero(g, REGION.trasJero);
+  PUB.traseraRacer(g, REGION.trasRacer);
+
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  t.anisotropy = 8;
   atlasCache = t;
   return t;
 }

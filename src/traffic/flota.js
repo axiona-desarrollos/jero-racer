@@ -522,10 +522,13 @@ function bus() {
     pasoDeRueda(c, s * (W - 0.015), z, r, M.plastico, { holgura: 0.06, ancho: 0.07, fondo: 0.05 });
   }
 
-  // Franjas de la flota a lo largo de los costados.
+  // Franjas de la flota en la mitad delantera y anuncio en la trasera, como
+  // los buses intermunicipales que llevan publicidad pintada.
   for (const s of [1, -1]) {
-    c.cajaConCalca(0.01, 0.78, L - 1.0, s * (W + 0.004), 1.42, -0.2, s > 0 ? '+x' : '-x',
+    c.cajaConCalca(0.01, 0.78, 5.4, s * (W + 0.004), 1.42, 2.6, s > 0 ? '+x' : '-x',
       calca(REGION.franjasBus), M.pintura);
+    c.cajaConCalca(0.012, 0.8, 5.0, s * (W + 0.005), 1.42, -2.95, s > 0 ? '+x' : '-x',
+      calca(REGION.pubBus), M.plastico);
   }
 
   // Frontal: parabrisas grande algo inclinado, letrero de destino, luces.
@@ -563,7 +566,11 @@ function bus() {
 }
 
 // ---------------------------------------------------- camion de carga
-function camion() {
+/**
+ * @param {{lateral?:number[], trasera?:number[]}} o regiones del atlas con la
+ *        publicidad del costado y de la puerta de atras
+ */
+function camion({ lateral = REGION.pubAxionasoft, trasera = REGION.trasAxionasoft } = {}) {
   const c = new Constructor();
   const L = 8.3;
   const zF = L / 2, zR = -L / 2;
@@ -608,8 +615,10 @@ function camion() {
   const fl = fz1 - fz0, fzc = (fz0 + fz1) / 2;
   c.caja(fw, fy1 - fy0, fl, 0, (fy0 + fy1) / 2, fzc, M.pintura2);
   for (const s of [1, -1]) {
-    c.cajaConCalca(0.012, 1.7, fl - 0.5, s * (fw / 2 + 0.006), 2.3, fzc, s > 0 ? '+x' : '-x',
-      calca(REGION.rotuloA), M.pintura2);
+    // Rotulo a 4:1 como su region del atlas: estirado se leeria deformado.
+    const alto = 1.62, largo = Math.min(fl - 0.4, alto * 4);
+    c.cajaConCalca(0.012, alto, largo, s * (fw / 2 + 0.006), 2.28, fzc, s > 0 ? '+x' : '-x',
+      calca(lateral), M.pintura2);
     // Postes de esquina y largueros de aluminio.
     for (const z of [fz0, fz1]) c.caja(0.07, fy1 - fy0, 0.07, s * (fw / 2), (fy0 + fy1) / 2, z, M.aluminio);
     c.caja(0.06, 0.08, fl, s * (fw / 2), fy0 + 0.04, fzc, M.aluminio);
@@ -617,8 +626,10 @@ function camion() {
     // Defensas laterales entre ejes.
     c.caja(0.04, 0.1, ejeD - ejeT - 2 * r - 0.5, s * 1.13, 0.68, (ejeD + ejeT) / 2, M.aluminio);
   }
-  // Puertas traseras: dos hojas, bisagras y barras de cierre.
-  c.caja(0.012, fy1 - fy0 - 0.1, 0.02, 0, (fy0 + fy1) / 2, fz0 - 0.006, M.plastico);
+  // Puertas traseras: rotulo, dos hojas, bisagras y barras de cierre. El
+  // rotulo de atras es lo que mas se ve: se maneja detras del camion.
+  c.cajaConCalca(2.2, 1.1, 0.012, 0, 2.62, fz0 - 0.008, '-z', calca(trasera), M.pintura2);
+  c.caja(0.012, fy1 - fy0 - 0.1, 0.02, 0, (fy0 + fy1) / 2, fz0 - 0.016, M.plastico);
   for (const x of [-0.6, 0.6]) c.cilindroY(0.022, fy1 - fy0 - 0.2, x, (fy0 + fy1) / 2, fz0 - 0.03, M.acero, 6);
   // Barra antiempotramiento y pilotos.
   c.caja(2.2, 0.12, 0.1, 0, 0.56, zR + 0.1, M.acero);
@@ -640,7 +651,14 @@ function camion() {
  * colombiana. `contenedor` elige entre un contenedor corrugado y un furgon
  * liso con rotulo.
  */
-function tractomula({ contenedor = true } = {}) {
+/**
+ * @param {object} o
+ * @param {boolean} [o.contenedor] contenedor corrugado (sin rotulo) o furgon rotulado
+ * @param {number[]} [o.lateral] region del atlas del costado
+ * @param {number[]} [o.trasera] region del atlas de las puertas
+ * @param {number} [o.proporcion] ancho/alto de la region lateral
+ */
+function tractomula({ contenedor = true, lateral = REGION.mulaAxionasoft, trasera = REGION.trasRacer, proporcion = 5.33 } = {}) {
   const c = new Constructor();
   const L = 17.6;
   const zF = L / 2, zR = -L / 2;
@@ -740,13 +758,15 @@ function tractomula({ contenedor = true } = {}) {
     c.caja(0.02, ry1 - ry0 - 0.1, 0.02, 0, (ry0 + ry1) / 2, rz0 - 0.01, M.plastico);
   } else {
     for (const s of [1, -1]) {
-      c.cajaConCalca(0.012, 2.1, rl - 1.0, s * (rw / 2 + 0.006), (ry0 + ry1) / 2, rzc, s > 0 ? '+x' : '-x',
-        calca(REGION.rotuloB), M.pintura2);
+      const alto = 2.1, largo = Math.min(rl - 1.0, alto * proporcion);
+      c.cajaConCalca(0.012, alto, largo, s * (rw / 2 + 0.006), (ry0 + ry1) / 2, rzc, s > 0 ? '+x' : '-x',
+        calca(lateral), M.pintura2);
       c.caja(0.06, 0.08, rl, s * (rw / 2), ry1 - 0.04, rzc, M.aluminio);
       c.caja(0.06, 0.08, rl, s * (rw / 2), ry0 + 0.04, rzc, M.aluminio);
       for (const z of [rz0, rz1]) c.caja(0.07, ry1 - ry0, 0.07, s * (rw / 2), (ry0 + ry1) / 2, z, M.aluminio);
     }
-    c.caja(0.012, ry1 - ry0 - 0.1, 0.02, 0, (ry0 + ry1) / 2, rz0 - 0.006, M.plastico);
+    c.cajaConCalca(2.3, 1.15, 0.012, 0, ry1 - 0.75, rz0 - 0.008, '-z', calca(trasera), M.pintura2);
+    c.caja(0.012, ry1 - ry0 - 0.1, 0.02, 0, (ry0 + ry1) / 2, rz0 - 0.016, M.plastico);
   }
   // Trasera: barra, pilotos, placa, loderas.
   c.caja(2.3, 0.13, 0.12, 0, 0.62, rz0 + 0.25, M.acero);
@@ -823,17 +843,41 @@ export const TIPOS = [
     id: 'bus', nombre: 'bus', crear: bus, peso: 7, pesado: true,
     paleta: [BLANCO, 0xe8e1cc, 0x1b4f93, 0x0c6b48, 0xb01d24],
   },
+  // Camiones con publicidad: axionasoft.com, Takamura (rojo, letras chinas)
+  // y el TikTok de Jero.
   {
-    id: 'camion', nombre: 'camión', crear: camion, peso: 8, pesado: true,
-    paleta: [BLANCO, BLANCO, ROJO, AZUL, 0x2a6e4a], paleta2: [0xf0f0ee, 0xd9dcdf],
+    id: 'camionAxiona', nombre: 'camión', peso: 4, pesado: true,
+    crear: () => camion({ lateral: REGION.pubAxionasoft, trasera: REGION.trasAxionasoft }),
+    paleta: [BLANCO, BLANCO, 0x1b2a3a, AZUL], paleta2: [0xf2f2f0],
   },
   {
-    id: 'mulaC', nombre: 'tractomula', crear: () => tractomula({ contenedor: true }), peso: 7, pesado: true,
+    id: 'camionTakamura', nombre: 'camión', peso: 3, pesado: true,
+    crear: () => camion({ lateral: REGION.pubTakamura, trasera: REGION.trasTakamura }),
+    paleta: [0xb3101b, BLANCO], paleta2: [0xb3101b],
+  },
+  {
+    id: 'camionJero', nombre: 'camión', peso: 3, pesado: true,
+    crear: () => camion({ lateral: REGION.pubJero, trasera: REGION.trasJero }),
+    paleta: [NEGRO, BLANCO, 0x2b2b38], paleta2: [0x15151c],
+  },
+  {
+    id: 'mulaC', nombre: 'tractomula', crear: () => tractomula({ contenedor: true }), peso: 5, pesado: true,
     paleta: [ROJO, AZUL, BLANCO, NEGRO, 0x1f6b45, NARANJA, 0x6b6f75],
     paleta2: [0xc65a1a, 0x1e4e8e, 0x9a2a20, 0x2e6d4a, 0x8a8f96, 0x6a1c22, 0xd8b24a],
   },
   {
-    id: 'mulaF', nombre: 'tractomula', crear: () => tractomula({ contenedor: false }), peso: 5, pesado: true,
-    paleta: [BLANCO, ROJO, AZUL, NEGRO, 0xd8b24a], paleta2: [0xf1f1ef],
+    id: 'mulaAxiona', nombre: 'tractomula', peso: 3, pesado: true,
+    crear: () => tractomula({ contenedor: false, lateral: REGION.mulaAxionasoft, trasera: REGION.trasAxionasoft }),
+    paleta: [BLANCO, AZUL, NEGRO, 0x1f6b45], paleta2: [0xf2f2f0],
+  },
+  {
+    id: 'mulaJero', nombre: 'tractomula', peso: 3, pesado: true,
+    crear: () => tractomula({ contenedor: false, lateral: REGION.mulaJero, trasera: REGION.trasJero }),
+    paleta: [NEGRO, ROJO, BLANCO], paleta2: [0x15151c],
+  },
+  {
+    id: 'mulaTakamura', nombre: 'tractomula', peso: 2, pesado: true,
+    crear: () => tractomula({ contenedor: false, lateral: REGION.pubTakamura, trasera: REGION.trasTakamura, proporcion: 4 }),
+    paleta: [0xb3101b, NEGRO], paleta2: [0xb3101b],
   },
 ];

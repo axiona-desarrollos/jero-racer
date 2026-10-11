@@ -1,36 +1,65 @@
 /* ==========================================================================
-   HIGHWAY RACER · Audio del tren motriz
+   JERO RACER · Sonido del motor
    --------------------------------------------------------------------------
    Todo sintetizado con Web Audio. Ni un archivo de sonido.
 
-   COMO SUENA UN V8 DE VERDAD
-   Un cuatro tiempos de 8 cilindros da 4 explosiones por vuelta de cigueñal:
-       f0 = rpm / 60 * 4        (760 rpm -> 50,7 Hz · 7500 rpm -> 500 Hz)
-   El caracter no esta en f0 sino en sus ARMONICOS. Por eso la fuente es una
-   PeriodicWave con el reparto de armonicos de un V8 de cruz, no una sierra.
+   POR QUE SE REHIZO
+   La version anterior sumaba un silbido de turbo entre 1,5 y 12 kHz, ruido de
+   admision siseante y un filtro que se abria hasta 6,5 kHz. Junto sonaba a
+   turbina de avion: mucho agudo y nada de pecho. Un coche de carreras con
+   escape grueso suena al reves: GRAVE, con pulsos, ronco al cargar y con
+   petardeos al soltar el acelerador.
 
-   RESONADORES
-   Un resonador de escape es fisicamente un filtro de banda: deja pasar unas
-   frecuencias y ahoga otras, SIN seguir al regimen. Por eso son tres peaking
-   a frecuencia FIJA. Si se movieran con las rpm sonaria a sintetizador.
+   DE DONDE SALE EL RONQUIDO
+   El escape no es un tono: es un tren de PULSOS de presion, uno por
+   explosion. En un V8 de ciguenal en cruz cada bancada descarga a intervalos
+   desiguales, y eso mete componentes a la frecuencia de giro del ciguenal y a
+   sus primeros multiplos ("el burbujeo"). Por eso la onda base no se afina a
+   la frecuencia de encendido sino a la de GIRO (rpm/60), con el 4o armonico
+   (el encendido) como el mas fuerte y los inferiores presentes:
+       760 rpm -> 12,7 Hz de giro, 51 Hz de encendido
+       7500 rpm -> 125 Hz de giro, 500 Hz de encendido
+   Los armonicos van en fase coseno: asi la onda sale picuda, como un pulso
+   de escape, y no redonda como un tono.
 
-   CARGA, NO ACELERADOR
-   El parametro que hace creible un motor es la CARGA, no la posicion del
-   pedal: a 6000 rpm con el pie levantado hay vueltas altas y carga cero, y
-   suena completamente distinto. Es el mismo 'Load' del C++.
+   Despues: saturacion suave (la aspereza), filtro paso bajo que se abre con
+   la carga pero no pasa de ~3 kHz, refuerzo de graves y resonadores fijos
+   como los de un silenciador de competicion.
+
+   PETARDEO ("tas tas tas")
+   Al levantar el pie con el motor alto de vueltas entra combustible sin
+   quemar en el escape caliente y explota a rafagas. Se sintetiza cada
+   petardo como un golpe corto de ruido saturado mas un "pum" grave, y se
+   programan rafagas con intervalos irregulares que se van espaciando.
    ========================================================================== */
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
-/** Reparto de armonicos. El 2º y el 4º marcados dan el burbujeo del V8. */
-function v8Wave(ctx) {
-  const n = 24;
+/** Onda del ciguenal: fundamental = giro, encendido en el 4o armonico. */
+function ondaCiguenal(ctx) {
+  // Los multiplos altos (8 a 32) no son adorno: en ralenti caen entre 100 y
+  // 400 Hz, que es lo unico que reproduce el altavoz de un telefono. Sin
+  // ellos el motor en el movil sonaba mudo.
+  const amp = {
+    1: 0.30, 2: 0.60, 3: 0.26, 4: 1.0, 5: 0.18, 6: 0.40, 7: 0.14, 8: 0.66,
+    9: 0.12, 10: 0.30, 11: 0.09, 12: 0.42, 13: 0.07, 14: 0.18, 15: 0.06, 16: 0.30,
+    18: 0.12, 20: 0.16, 22: 0.06, 24: 0.12, 28: 0.07, 32: 0.08,
+  };
+  const n = 33;
   const real = new Float32Array(n), imag = new Float32Array(n);
-  const amp = [0, 1.0, 0.82, 0.45, 0.62, 0.28, 0.34, 0.18, 0.22,
-    0.12, 0.15, 0.08, 0.10, 0.06, 0.07, 0.04, 0.05,
-    0.03, 0.035, 0.02, 0.025, 0.015, 0.018, 0.01];
-  for (let i = 1; i < n; i++) imag[i] = amp[i] ?? 0;
+  for (const h in amp) real[+h] = amp[h];
   return ctx.createPeriodicWave(real, imag, { disableNormalization: false });
+}
+
+/** Curva de saturacion tipo valvula: redondea los picos y anade armonicos. */
+function curvaSaturacion(k, n = 2048) {
+  const c = new Float32Array(n);
+  const t = Math.tanh(k);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    c[i] = Math.tanh(k * x) / t;
+  }
+  return c;
 }
 
 function noiseBuffer(ctx, seconds = 2) {
@@ -46,11 +75,18 @@ function noiseBuffer(ctx, seconds = 2) {
   return b;
 }
 
+function ruidoBlanco(ctx, seconds = 0.25) {
+  const n = Math.floor(ctx.sampleRate * seconds);
+  const b = ctx.createBuffer(1, n, ctx.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  return b;
+}
+
 export class EngineAudio {
-  constructor({ maxRPM = 7500, idleRPM = 760, cylinders = 8 } = {}) {
+  constructor({ maxRPM = 7500, idleRPM = 760 } = {}) {
     this.maxRPM = maxRPM;
     this.idleRPM = idleRPM;
-    this.firingPerRev = cylinders / 2;
     this.ctx = null;
     this.ready = false;
     this.enabled = true;
@@ -58,18 +94,26 @@ export class EngineAudio {
     // estado suavizado
     this.rpm = idleRPM;
     this.load = 0;
-    this.boost = 0;
     this.slip = 0;
     this._lastGear = 1;
     this._lastThrottle = 0;
+    this._petardeoHasta = 0;
+    /** Reloj forzado (solo para renderizar offline); null = el del contexto. */
+    this.reloj = null;
   }
 
-  /** El navegador exige un gesto del usuario para arrancar el audio. */
-  async start() {
-    if (this.ctx) { if (this.ctx.state === 'suspended') await this.ctx.resume(); return; }
+  get ahora() { return this.reloj ?? this.ctx.currentTime; }
+
+  /**
+   * El navegador exige un gesto del usuario para arrancar el audio.
+   * @param {BaseAudioContext} [ctxExterno] p.ej. un OfflineAudioContext para
+   *        grabar una muestra del sonido.
+   */
+  async start(ctxExterno = null) {
+    if (this.ctx) { if (this.ctx.state === 'suspended' && !ctxExterno) await this.ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    const ctx = this.ctx = new AC();
+    if (!ctxExterno && !AC) return;
+    const ctx = this.ctx = ctxExterno ?? new AC();
 
     const master = this.master = ctx.createGain();
     master.gain.value = 0.0;
@@ -77,199 +121,231 @@ export class EngineAudio {
 
     // limitador de seguridad: nada de picos que revienten los cascos
     const lim = ctx.createDynamicsCompressor();
-    lim.threshold.value = -8; lim.knee.value = 6; lim.ratio.value = 12;
-    lim.attack.value = 0.003; lim.release.value = 0.12;
+    lim.threshold.value = -10; lim.knee.value = 8; lim.ratio.value = 10;
+    lim.attack.value = 0.002; lim.release.value = 0.15;
     lim.connect(master);
     this.bus = lim;
+    // Los petardos van por su propio canal, con un limitador que solo frena
+    // los picos de verdad. Por el del motor salian aplastados contra el
+    // ronquido y no se distinguian: tienen que ESTALLAR por encima.
+    const limPetardos = ctx.createDynamicsCompressor();
+    limPetardos.threshold.value = -3; limPetardos.knee.value = 2; limPetardos.ratio.value = 20;
+    limPetardos.attack.value = 0.001; limPetardos.release.value = 0.08;
+    this.busPetardos = ctx.createGain(); this.busPetardos.gain.value = 0.7;
+    this.busPetardos.connect(limPetardos); limPetardos.connect(master);
 
     // ---------------------------------------------------------------- MOTOR
-    const wave = v8Wave(ctx);
     this.osc = ctx.createOscillator();
-    this.osc.setPeriodicWave(wave);
-    this.osc.frequency.value = this.#firing(this.idleRPM);
+    this.osc.setPeriodicWave(ondaCiguenal(ctx));
+    this.osc.frequency.value = this.idleRPM / 60;
 
-    // Una octava por debajo, desafinada: da el grave de cruz del V8 y evita
-    // que suene a un solo oscilador limpio.
-    this.oscSub = ctx.createOscillator();
-    this.oscSub.setPeriodicWave(wave);
-    this.oscSub.frequency.value = this.#firing(this.idleRPM) * 0.5;
-    this.oscSub.detune.value = 9;
+    // Vaiven minimo de regimen: un motor real nunca gira perfectamente fijo,
+    // y un tono clavado delata al sintetizador.
+    const vaiven = ctx.createOscillator();
+    vaiven.frequency.value = 5.3;
+    const gVaiven = ctx.createGain(); gVaiven.gain.value = 6;     // cents
+    vaiven.connect(gVaiven); gVaiven.connect(this.osc.detune);
+    vaiven.start();
 
-    this.gOsc = ctx.createGain(); this.gOsc.gain.value = 0.55;
-    this.gSub = ctx.createGain(); this.gSub.gain.value = 0.40;
+    this.pre = ctx.createGain(); this.pre.gain.value = 0.8;
+    const sat = ctx.createWaveShaper();
+    sat.curve = curvaSaturacion(2.4);
+    sat.oversample = '2x';
 
-    // Brillo por carga: a pleno gas se abre, en retencion se cierra.
-    this.tone = ctx.createBiquadFilter();
-    this.tone.type = 'lowpass';
-    this.tone.frequency.value = 700;
-    this.tone.Q.value = 0.8;
+    this.tono = ctx.createBiquadFilter();
+    this.tono.type = 'lowpass'; this.tono.frequency.value = 680; this.tono.Q.value = 0.7;
 
-    // --- RESONADORES DE ESCAPE: frecuencia FIJA, no siguen al regimen ------
-    const resSpec = [[92, 7.5, 2.2], [225, 5.0, 1.6], [430, 3.5, 1.1]];
-    this.res = resSpec.map(([f, g, q]) => {
-      const b = ctx.createBiquadFilter();
-      b.type = 'peaking'; b.frequency.value = f; b.gain.value = g; b.Q.value = q;
-      return b;
-    });
+    // Cuerpo: graves arriba, el "honk" medio abajo, y dos resonadores fijos
+    // de silenciador deportivo. Fijos: si siguieran al regimen sonaria a sinte.
+    // Fuera lo subsonico: en ralenti los dos primeros multiplos caen en 13 y
+    // 25 Hz, que nadie oye y que se comian el margen del limitador.
+    const subsonico = ctx.createBiquadFilter();
+    subsonico.type = 'highpass'; subsonico.frequency.value = 42; subsonico.Q.value = 0.7;
+    const graves = ctx.createBiquadFilter();
+    graves.type = 'peaking'; graves.frequency.value = 120; graves.gain.value = 4; graves.Q.value = 0.8;
+    const res1 = ctx.createBiquadFilter();
+    res1.type = 'peaking'; res1.frequency.value = 95; res1.gain.value = 5; res1.Q.value = 1.2;
+    const res2 = ctx.createBiquadFilter();
+    res2.type = 'peaking'; res2.frequency.value = 240; res2.gain.value = 3.5; res2.Q.value = 1.0;
+    const sinHonk = ctx.createBiquadFilter();
+    sinHonk.type = 'peaking'; sinHonk.frequency.value = 680; sinHonk.gain.value = -4; sinHonk.Q.value = 1.1;
 
-    this.osc.connect(this.gOsc); this.oscSub.connect(this.gSub);
-    this.gOsc.connect(this.tone); this.gSub.connect(this.tone);
-    let chain = this.tone;
-    for (const r of this.res) { chain.connect(r); chain = r; }
-    this.engineOut = ctx.createGain(); this.engineOut.gain.value = 0.85;
-    chain.connect(this.engineOut); this.engineOut.connect(lim);
+    this.gMotor = ctx.createGain(); this.gMotor.gain.value = 0.5;
+    this.engineOut = ctx.createGain(); this.engineOut.gain.value = 0.9;
+    this.osc.connect(this.pre); this.pre.connect(sat); sat.connect(this.tono);
+    this.tono.connect(subsonico); subsonico.connect(graves); graves.connect(res1); res1.connect(res2); res2.connect(sinHonk);
+    sinHonk.connect(this.gMotor); this.gMotor.connect(this.engineOut); this.engineOut.connect(lim);
+    this.osc.start();
 
-    this.osc.start(); this.oscSub.start();
-
-    // ------------------------------------------------- ADMISION / TURBULENCIA
+    // ------------------------------------------------- ASPEREZA DEL ESCAPE
+    // Ruido modulado a la frecuencia de encendido: el "rrrr" de un escape
+    // libre a alta carga. Bajo y en banda media, nunca un siseo.
     this.noiseBuf = noiseBuffer(ctx);
-    this.intake = ctx.createBufferSource();
-    this.intake.buffer = this.noiseBuf; this.intake.loop = true;
-    this.intakeBp = ctx.createBiquadFilter();
-    this.intakeBp.type = 'bandpass'; this.intakeBp.frequency.value = 500; this.intakeBp.Q.value = 1.1;
-    this.gIntake = ctx.createGain(); this.gIntake.gain.value = 0;
-    this.intake.connect(this.intakeBp); this.intakeBp.connect(this.gIntake);
-    this.gIntake.connect(lim);
-    this.intake.start();
-
-    // ------------------------------------------------------------ TURBO
-    // Silbido de soplante: sube de tono y de volumen con la presion.
-    this.turbo = ctx.createOscillator();
-    this.turbo.type = 'sine';
-    this.turbo.frequency.value = 1800;
-    this.turboHarm = ctx.createOscillator();
-    this.turboHarm.type = 'triangle';
-    this.turboHarm.frequency.value = 3600;
-    this.gTurbo = ctx.createGain(); this.gTurbo.gain.value = 0;
-    this.gTurboH = ctx.createGain(); this.gTurboH.gain.value = 0;
-    const turboHp = ctx.createBiquadFilter();
-    turboHp.type = 'highpass'; turboHp.frequency.value = 900;
-    this.turbo.connect(this.gTurbo); this.turboHarm.connect(this.gTurboH);
-    this.gTurbo.connect(turboHp); this.gTurboH.connect(turboHp);
-    turboHp.connect(lim);
-    this.turbo.start(); this.turboHarm.start();
+    this.blanco = ruidoBlanco(ctx);
+    const rasp = ctx.createBufferSource();
+    rasp.buffer = this.noiseBuf; rasp.loop = true;
+    this.raspBp = ctx.createBiquadFilter();
+    this.raspBp.type = 'bandpass'; this.raspBp.frequency.value = 600; this.raspBp.Q.value = 1.0;
+    this.gRasp = ctx.createGain(); this.gRasp.gain.value = 0;
+    this.modRasp = ctx.createOscillator(); this.modRasp.type = 'square';
+    this.modRasp.frequency.value = (this.idleRPM / 60) * 4;
+    this.gModRasp = ctx.createGain(); this.gModRasp.gain.value = 0;
+    this.modRasp.connect(this.gModRasp); this.gModRasp.connect(this.gRasp.gain);
+    rasp.connect(this.raspBp); this.raspBp.connect(this.gRasp); this.gRasp.connect(this.engineOut);
+    rasp.start(); this.modRasp.start();
 
     // ------------------------------------------------------------ NEUMATICOS
     this.tyre = ctx.createBufferSource();
     this.tyre.buffer = this.noiseBuf; this.tyre.loop = true;
     const tyreBp = ctx.createBiquadFilter();
-    tyreBp.type = 'bandpass'; tyreBp.frequency.value = 1150; tyreBp.Q.value = 4.2;
+    tyreBp.type = 'bandpass'; tyreBp.frequency.value = 1050; tyreBp.Q.value = 4.2;
     this.gTyre = ctx.createGain(); this.gTyre.gain.value = 0;
     this.tyre.connect(tyreBp); tyreBp.connect(this.gTyre); this.gTyre.connect(lim);
     this.tyre.start();
 
     // ------------------------------------------------------------ VIENTO
+    // Paso bajo y discreto: antes era una banda en 620 Hz que se sumaba al
+    // siseo general.
     this.wind = ctx.createBufferSource();
     this.wind.buffer = this.noiseBuf; this.wind.loop = true;
-    const windBp = ctx.createBiquadFilter();
-    windBp.type = 'bandpass'; windBp.frequency.value = 620; windBp.Q.value = 0.7;
+    const windLp = ctx.createBiquadFilter();
+    windLp.type = 'lowpass'; windLp.frequency.value = 420; windLp.Q.value = 0.5;
     this.gWind = ctx.createGain(); this.gWind.gain.value = 0;
-    this.wind.connect(windBp); windBp.connect(this.gWind); this.gWind.connect(lim);
+    this.wind.connect(windLp); windLp.connect(this.gWind); this.gWind.connect(lim);
     this.wind.start();
 
     // subida suave para no dar un golpe al arrancar
-    master.gain.setTargetAtTime(this.enabled ? 0.9 : 0, ctx.currentTime, 0.25);
+    master.gain.setTargetAtTime(this.enabled ? 0.9 : 0, this.ahora, 0.25);
     this.ready = true;
   }
 
-  #firing(rpm) { return (rpm / 60) * this.firingPerRev; }
-
   /**
-   * @param {object} t telemetria: rpm, load, normalizedRPM, gear, throttle,
-   *                   rpmDeltaPerSec, onLimiter, slipRear, speedKmh, shifting
+   * @param {object} t telemetria: rpm, load, normalizedRPM, gearNum, throttle,
+   *                   onLimiter, slipRear, speedKmh
    */
   update(t, dt) {
     if (!this.ready || !this.ctx) return;
-    const ctx = this.ctx, now = ctx.currentTime;
+    const now = this.ahora;
     const k = (target, cur, up, down) => {
       const rate = target > cur ? up : down;
       return cur + (target - cur) * (1 - Math.pow(1 - rate, dt * 60));
     };
 
     // Suavizado ASIMETRICO: subir de vueltas es inmediato, bajar tiene la
-    // inercia del cigueñal. Empujar la telemetria cruda produce zipper noise.
+    // inercia del ciguenal. Empujar la telemetria cruda produce zipper noise.
     this.rpm = k(t.rpm, this.rpm, 0.55, 0.16);
     this.load = k(t.load ?? 0, this.load, 0.35, 0.12);
     this.slip = k(t.slipRear ?? 0, this.slip, 0.30, 0.06);
 
     const nrpm = clamp((this.rpm - this.idleRPM) / (this.maxRPM - this.idleRPM), 0, 1);
-    const f0 = this.#firing(this.rpm);
+    const giro = this.rpm / 60;
+    this.osc.frequency.setTargetAtTime(giro, now, 0.012);
+    this.modRasp.frequency.setTargetAtTime(giro * 4, now, 0.012);
 
-    this.osc.frequency.setTargetAtTime(f0, now, 0.012);
-    this.oscSub.frequency.setTargetAtTime(f0 * 0.5, now, 0.012);
+    // Con carga el escape ruge: mas saturacion, mas brillo (con tope) y mas
+    // volumen. En retencion queda el burbujeo grave.
+    this.pre.gain.setTargetAtTime(0.9 + this.load * 0.9 + nrpm * 0.25, now, 0.03);
+    this.tono.frequency.setTargetAtTime(680 + nrpm * 1400 + this.load * 800, now, 0.04);
+    // En retencion el motor baja a un murmullo: es cuando se oyen los petardos.
+    this.gMotor.gain.setTargetAtTime(0.22 + this.load * 0.36 + nrpm * 0.08, now, 0.05);
 
-    // Brillo: con carga se abre hasta 6,5 kHz; en retencion se cierra a 900 Hz.
-    const cut = 700 + nrpm * 2600 + this.load * 3200;
-    this.tone.frequency.setTargetAtTime(cut, now, 0.03);
+    const aspereza = 0.014 + this.load * (0.02 + nrpm * 0.07);
+    this.gRasp.gain.setTargetAtTime(aspereza, now, 0.05);
+    this.gModRasp.gain.setTargetAtTime(aspereza * 0.9, now, 0.05);
+    this.raspBp.frequency.setTargetAtTime(520 + nrpm * 900, now, 0.05);
 
-    this.gOsc.gain.setTargetAtTime(0.30 + this.load * 0.34, now, 0.03);
-    this.gSub.gain.setTargetAtTime(0.34 + this.load * 0.18, now, 0.03);
+    // ------------------------------------------------------------ PETARDEO
+    const acel = t.throttle ?? 0;
+    const levanto = this._lastThrottle > 0.5 && acel < 0.18;
+    if (levanto && this.rpm > 3000) {
+      this.petardeo(0.45 + nrpm * 0.9, 0.55 + nrpm * 0.45);
+    }
+    // Rodando en retencion con el motor alto: algun petardo suelto.
+    const rodando = (t.speedKmh ?? 0) > 40;
+    if (rodando && acel < 0.05 && this.rpm > 3600 && now > this._petardeoHasta
+        && Math.random() < dt * 1.4) {
+      this.#petardo(now + 0.01, 0.35 + Math.random() * 0.3);
+    }
+    this._lastThrottle = acel;
 
-    // Admision: silba con las vueltas y con el gas abierto.
-    this.intakeBp.frequency.setTargetAtTime(380 + nrpm * 1500, now, 0.04);
-    this.gIntake.gain.setTargetAtTime(0.05 + this.load * nrpm * 0.20, now, 0.04);
-
-    // ------------------------------------------------------------- TURBO
-    // La soplante tarda en subir y baja deprisa al cerrar mariposa.
-    const objetivoBoost = clamp(this.load * (0.25 + nrpm * 1.15), 0, 1);
-    this.boost = k(objetivoBoost, this.boost, 0.045, 0.22);
-    this.turbo.frequency.setTargetAtTime(1500 + this.boost * 5200 + nrpm * 900, now, 0.05);
-    this.turboHarm.frequency.setTargetAtTime(3000 + this.boost * 9000, now, 0.05);
-    this.gTurbo.gain.setTargetAtTime(this.boost * this.boost * 0.055, now, 0.05);
-    this.gTurboH.gain.setTargetAtTime(this.boost * this.boost * 0.022, now, 0.05);
-
-    // Valvula de descarga: al soltar gas con presion, el aire comprimido sale
-    // de golpe. Es el "pssh" con silbido que hace un turbo de verdad.
-    const soltoGas = this._lastThrottle > 0.45 && (t.throttle ?? 0) < 0.18;
-    if (soltoGas && this.boost > 0.22) this.blowOff(this.boost);
-    this._lastThrottle = t.throttle ?? 0;
-
-    // --------------------------------------------------------- CORTE Y CAMBIO
-    if (t.gear !== this._lastGear) {
-      if (t.gear > this._lastGear && this.load > 0.3) this.shiftCut();
-      this._lastGear = t.gear;
+    // --------------------------------------------------------- CAMBIO DE MARCHA
+    const marcha = t.gearNum ?? 1;
+    if (marcha !== this._lastGear) {
+      if (marcha > this._lastGear && this._lastGear > 0 && this.load > 0.3) this.shiftCut();
+      this._lastGear = marcha;
     }
 
     // ------------------------------------------------------ RUEDA Y VIENTO
-    // Ataca rapido y suelta lento: asi el chirrido no parpadea al entrar y
-    // salir del umbral.
-    this.gTyre.gain.setTargetAtTime(Math.pow(this.slip, 1.4) * 0.22, now, 0.05);
-    const v = Math.max(0, (t.speedKmh ?? 0) - 35) / 220;
-    this.gWind.gain.setTargetAtTime(clamp(v, 0, 1) * 0.085, now, 0.12);
+    this.gTyre.gain.setTargetAtTime(Math.pow(this.slip, 1.4) * 0.16, now, 0.05);
+    const v = Math.max(0, (t.speedKmh ?? 0) - 40) / 220;
+    this.gWind.gain.setTargetAtTime(clamp(v, 0, 1) * 0.07, now, 0.15);
 
-    // Limitador: chisporroteo seco contra el corte.
-    if (t.onLimiter && Math.random() < 0.35) this.#burst(1600, 0.035, 0.05, 4);
+    // Limitador: tartamudeo con petardos cortos.
+    if (t.onLimiter && Math.random() < 0.3) this.#petardo(now + 0.005, 0.35);
   }
 
-  /** Corte de inyeccion del cambio: el motor calla 90 ms y da un golpe seco. */
+  /**
+   * Rafaga de petardos: "tas tas tas" con intervalos irregulares que se van
+   * espaciando y apagando, como el escape que se vacia.
+   * @param {number} duracion segundos
+   * @param {number} fuerza 0..1
+   */
+  petardeo(duracion = 0.8, fuerza = 0.8) {
+    if (!this.ready) return;
+    const t0 = this.ahora;
+    let t = t0 + 0.03;
+    const fin = t0 + duracion;
+    while (t < fin) {
+      const avance = (t - t0) / duracion;
+      const f = fuerza * (1 - avance * 0.7) * (0.6 + Math.random() * 0.4);
+      this.#petardo(t, f);
+      // A veces doble: "ta-tas".
+      if (Math.random() < 0.25) this.#petardo(t + 0.022 + Math.random() * 0.02, f * 0.7);
+      t += 0.045 + Math.random() * 0.09 + avance * 0.12;
+    }
+    this._petardeoHasta = fin;
+  }
+
+  /** Un petardo: chasquido de ruido saturado y un "pum" grave debajo. */
+  #petardo(cuando, fuerza) {
+    const ctx = this.ctx;
+    const f = clamp(fuerza, 0, 1);
+    // Chasquido
+    const s = ctx.createBufferSource(); s.buffer = this.blanco;
+    s.playbackRate.value = 0.7 + Math.random() * 0.6;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 280 + Math.random() * 420; bp.Q.value = 0.8;
+    const sat = ctx.createWaveShaper(); sat.curve = this._curvaDura ?? (this._curvaDura = curvaSaturacion(6));
+    const g = ctx.createGain();
+    const d = 0.045 + Math.random() * 0.035;
+    g.gain.setValueAtTime(0.0001, cuando);
+    g.gain.exponentialRampToValueAtTime(0.85 * f, cuando + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, cuando + d);
+    s.connect(bp); bp.connect(sat); sat.connect(g); g.connect(this.busPetardos);
+    s.start(cuando, Math.random() * 0.15); s.stop(cuando + d + 0.02);
+    // Pum
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(95 + Math.random() * 30, cuando);
+    o.frequency.exponentialRampToValueAtTime(42, cuando + 0.07);
+    const go = ctx.createGain();
+    go.gain.setValueAtTime(0.0001, cuando);
+    go.gain.exponentialRampToValueAtTime(0.7 * f, cuando + 0.004);
+    go.gain.exponentialRampToValueAtTime(0.0001, cuando + 0.09);
+    o.connect(go); go.connect(this.busPetardos);
+    o.start(cuando); o.stop(cuando + 0.1);
+  }
+
+  /** Corte de inyeccion del cambio: el motor calla un instante y petardea. */
   shiftCut() {
     if (!this.ready) return;
-    const now = this.ctx.currentTime;
+    const now = this.ahora;
     this.engineOut.gain.cancelScheduledValues(now);
-    this.engineOut.gain.setValueAtTime(0.85, now);
-    this.engineOut.gain.linearRampToValueAtTime(0.12, now + 0.012);
-    this.engineOut.gain.setValueAtTime(0.12, now + 0.085);
-    this.engineOut.gain.linearRampToValueAtTime(0.85, now + 0.16);
-    this.#burst(900, 0.09, 0.10, 2.2);     // golpe de escape
-  }
-
-  /** Valvula de descarga del turbo. */
-  blowOff(fuerza = 1) {
-    if (!this.ready) return;
-    const f = clamp(fuerza, 0, 1);
-    this.#burst(2400, 0.055 * f, 0.20 + 0.12 * f, 1.5);   // el "pssh"
-    // …y el silbido de aire que se escapa, cayendo de tono
-    const ctx = this.ctx, now = ctx.currentTime;
-    const o = ctx.createOscillator(); o.type = 'sine';
-    o.frequency.setValueAtTime(3800 + 2600 * f, now);
-    o.frequency.exponentialRampToValueAtTime(900, now + 0.22 + 0.1 * f);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.05 * f, now + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.26 + 0.12 * f);
-    o.connect(g); g.connect(this.bus);
-    o.start(now); o.stop(now + 0.45);
-    this.boost *= 0.15;
+    this.engineOut.gain.setValueAtTime(0.9, now);
+    this.engineOut.gain.linearRampToValueAtTime(0.15, now + 0.012);
+    this.engineOut.gain.setValueAtTime(0.15, now + 0.08);
+    this.engineOut.gain.linearRampToValueAtTime(0.9, now + 0.15);
+    this.#petardo(now + 0.02, 0.85);
+    if (Math.random() < 0.6) this.#petardo(now + 0.07, 0.55);
   }
 
   /** Ruido filtrado con envolvente: sirve para golpes, pssh y chisporroteo. */
@@ -387,7 +463,7 @@ export class EngineAudio {
     if (!this.ready) return;
     const now = this.ctx.currentTime;
     this.engineOut.gain.cancelScheduledValues(now);
-    this.engineOut.gain.setTargetAtTime(0.85, now, 0.15);
+    this.engineOut.gain.setTargetAtTime(0.9, now, 0.15);
   }
 
   /** Pausa real del audio (pestana oculta, menu de pausa). */
