@@ -101,6 +101,32 @@ export class Carrera {
     /** Mientras hay persecucion los puntos valen mas. */
     this.enPersecucion = false;
     this.persecuciones = 0;
+    /** Patrullas y camiones del Ejercito que se estrellaron persiguiendolo. */
+    this.tumbadas = 0;
+    /** Camaras que lo cogieron por encima del limite. No restan: es el chiste. */
+    this.fotomultas = 0;
+  }
+
+  /** Una unidad de la persecucion se estrello contra el trafico. */
+  derribo(militar) {
+    if (this.estado !== ESTADO.RODANDO) return 0;
+    const bono = militar ? 800 : 500;
+    this.puntos += bono;
+    this.tumbadas++;
+    return bono;
+  }
+
+  /** Paso por una camara por encima del limite. Devuelve cuantas lleva. */
+  fotomulta() {
+    if (this.estado !== ESTADO.RODANDO) return 0;
+    return ++this.fotomultas;
+  }
+
+  /** Paso juicioso por una camara con aviso. */
+  salvada() {
+    if (this.estado !== ESTADO.RODANDO) return 0;
+    this.puntos += 300;
+    return 300;
   }
 
   /**

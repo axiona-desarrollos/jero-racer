@@ -14,14 +14,27 @@
    choque se DETECTA con la misma prueba SAT que el trafico y su efecto se
    APLICA a mano (un empujon lateral medido y un golpe de dano), y la unidad
    rebota hacia fuera. Asi la embestida se siente fuerte pero nunca rompe la
-   fisica. Por la misma razon esquivan el trafico en vez de chocar con el.
+   fisica.
+
+   TAMPOCO SON FANTASMAS PARA EL TRAFICO... DONDE SE VE
+   Conducen por carriles y frenan a tiempo, pero si una unidad se le mete a
+   un carro o a un camion, se estrella: sale dando vueltas, se queda parada
+   echando humo y ya no persigue. Solo a mas de 25 m por detras del jugador,
+   donde la camara no mira, atraviesan el trafico: a 300 km/h entre carros a
+   90 ningun conductor que frene a tiempo alcanzaria al jugador, y la
+   persecucion se quedaba sin patrullas. Al entrar en la zona que se ve se
+   vuelven solidas en cuanto no tienen a nadie encima. Mientras embiste al jugador no mira el trafico, asi que
+   llevarla hacia una tractomula es la forma de quitarsela de encima. El
+   vehiculo golpeado se sacude, frena y prende las estacionarias, y el
+   trafico frena y se cambia de carril ante las unidades (ver
+   Trafico.obstaculos).
    ========================================================================== */
 
 import * as THREE from 'three';
 import { TIPOS_PERSECUCION, fabricar } from '../traffic/flota.js';
 import { geometriaRueda, prepararInstancias } from '../traffic/modelado.js';
 import { solapanXZ, texturaSombra } from '../traffic/trafico.js';
-import { VIA, anchoCalzada } from '../world/autopista.js';
+import { VIA, anchoCalzada, carrilX } from '../world/autopista.js';
 
 export const PERSECUCION = Object.freeze({
   umbralKmh: 170,
@@ -46,6 +59,14 @@ export const PERSECUCION = Object.freeze({
 });
 
 const MARGEN = 0.08;
+
+// Ancho y largo en planta de algo girado: una patrulla estrellada que quedo
+// atravesada ocupa casi un carril, y medirla derecha provocaba choques en cadena.
+const anchoP = o => Math.abs(Math.sin(o.yaw)) * o.largo + Math.abs(Math.cos(o.yaw)) * o.ancho;
+const largoP = o => Math.abs(Math.sin(o.yaw)) * o.ancho + Math.abs(Math.cos(o.yaw)) * o.largo;
+
+/** Carril (0 = el de la derecha) en el que cae la X. */
+const carrilDe = x => Math.max(0, Math.min(VIA.carriles - 1, Math.floor((x + anchoCalzada() / 2) / VIA.anchoCarril)));
 
 /** Helicoptero de la Policia: cuerpo, cola, patines, rotores y reflector. */
 function construirHelicoptero() {
@@ -174,8 +195,9 @@ export class Persecucion {
         this.unidades.push({
           clave, modelo: mod, militar: clave === 'militar',
           largo: mod.largo, ancho: mod.ancho,
-          activo: false, retirada: false,
-          x: 0, z: 0, xPrev: 0, zPrev: 0, v: 0, yaw: 0, yawPrev: 0,
+          activo: false, retirada: false, chocada: false,
+          x: 0, z: 0, xPrev: 0, zPrev: 0, v: 0, vLat: 0, yaw: 0, yawPrev: 0,
+          vx: 0, vGiro: 0, tAturdido: 0, acumHumo: 0,
           distancia: 0, distanciaPrev: 0,
           lado: 1, tGolpe: 0, tEmbestida: 2, fase: Math.random(),
           tDisparo: 2, rafaga: 0, tTiro: 0,
@@ -213,6 +235,7 @@ export class Persecucion {
     this._eje = new THREE.Vector3(1, 0, 0);
     this._arriba = new THREE.Vector3(0, 1, 0);
     this._col = new THREE.Color();
+    this._obstaculos = [];
     this.reiniciar();
   }
 
@@ -229,7 +252,8 @@ export class Persecucion {
     this.eventos = [];
     this.reloj = 0;
     for (const t of this.trazas ?? []) t.vida = 0;
-    for (const u of this.unidades) { u.activo = false; u.retirada = false; }
+    for (const u of this.unidades) { u.activo = false; u.retirada = false; u.chocada = false; }
+    this._obstaculos.length = 0;
     this.heliActivo = false;
     this.heli.grupo.visible = false;
     this.heli.mancha.visible = false;
@@ -239,14 +263,14 @@ export class Persecucion {
   get cercana() {
     let d = Infinity, lado = 0;
     for (const u of this.unidades) {
-      if (!u.activo) continue;
+      if (!u.activo || u.chocada) continue;
       const dd = Math.hypot(u.x - this._jx, u.z - this._jz);
       if (dd < d) { d = dd; lado = Math.sign(u.x - this._jx); }
     }
     return { distancia: d, lado };
   }
 
-  get unidadesActivas() { return this.unidades.filter(u => u.activo && !u.retirada).length; }
+  get unidadesActivas() { return this.unidades.filter(u => u.activo && !u.retirada && !u.chocada).length; }
 
   #iniciar(j) {
     this.activa = true;
@@ -272,9 +296,23 @@ export class Persecucion {
     if (!u) return false;
     u.activo = true;
     u.retirada = false;
+    u.chocada = false;
+    u.vx = 0; u.vGiro = 0; u.vLat = 0; u.tAturdido = 0;
     u.z = u.zPrev = j.z - 120 - orden * 28 - Math.random() * 20;
-    const carril = Math.floor(Math.random() * VIA.carriles);
-    u.x = u.xPrev = -anchoCalzada() / 2 + VIA.anchoCarril * (carril + 0.5);
+    // En un carril sin nadie cerca: aparecer encima o pegada a un camion era
+    // estrellarse antes de arrancar.
+    const ocupado = c => (this._trafico?.vehiculos ?? []).some(t => t.vivo
+      && Math.abs(t.x - carrilX(c)) < VIA.anchoCarril * 0.8 && t.z > u.z - 25 && t.z < u.z + 60);
+    const inicio = Math.floor(Math.random() * VIA.carriles);
+    let carril = inicio;
+    for (let k = 0; k < VIA.carriles; k++) {
+      const c = (inicio + k) % VIA.carriles;
+      if (!ocupado(c)) { carril = c; break; }
+    }
+    u.x = u.xPrev = carrilX(carril);
+    u.carril = carril;
+    u.tDecision = 0;
+    u.solida = false;
     u.v = Math.max(j.velocidad + 8, 40);
     u.yaw = u.yawPrev = 0;
     u.lado = Math.random() < 0.5 ? -1 : 1;
@@ -299,6 +337,7 @@ export class Persecucion {
    */
   actualizar(dt, j, trafico, enJuego) {
     this.reloj += dt;
+    this._trafico = trafico;
     this._jx = j.x; this._jz = j.z;
     this._jxPrev ??= j.x;
     const cfg = this.cfg;
@@ -361,11 +400,49 @@ export class Persecucion {
 
     // --- unidades --------------------------------------------------------------------
     const borde = anchoCalzada() / 2;
+    const cajaJ = { x: j.x, z: j.z, yaw: j.yaw, largo: j.largo, ancho: j.ancho };
+    // Lo que cada unidad tiene que esquivar: el trafico y las demas unidades
+    // (asi no van en fila india detras de la primera: la adelantan).
+    const obstaculos = this._obsTmp ??= [];
+    obstaculos.length = 0;
+    for (const t of trafico.vehiculos) if (t.vivo) obstaculos.push(t);
+    for (const o of this.unidades) if (o.activo && (o.solida || o.chocada)) obstaculos.push(o);
+    const vel = o => o.velocidad ?? o.v;
     for (const u of this.unidades) {
       if (!u.activo) continue;
       u.xPrev = u.x; u.zPrev = u.z; u.yawPrev = u.yaw; u.distanciaPrev = u.distancia;
       u.tGolpe = Math.max(0, u.tGolpe - dt);
+      u.tAturdido = Math.max(0, u.tAturdido - dt);
       const dz = j.z - u.z;                     // > 0: la unidad va por detras
+
+      if (u.chocada) {
+        // Fuera de combate: patina dando vueltas hasta quedarse quieta.
+        if (dz > 260 || dz < -400) { u.activo = false; continue; }
+        u.v = Math.max(0, u.v - 7 * dt);
+        u.vx *= Math.exp(-2.4 * dt);
+        u.vGiro *= Math.exp(-1.3 * dt);
+        u.z += u.v * dt;
+        u.distancia += u.v * dt;
+        u.x = Math.max(-borde + u.ancho / 2, Math.min(borde - u.ancho / 2, u.x + u.vx * dt));
+        u.yaw += u.vGiro * dt;
+        u.vLat = u.vx;
+        this.#contraTrafico(u, trafico);
+        // El jugador tambien se la puede llevar por delante: golpe y frenazo.
+        if (enJuego && u.tGolpe <= 0
+            && solapanXZ(cajaJ, { x: u.x, z: u.z, yaw: u.yaw, largo: u.largo + MARGEN, ancho: u.ancho + MARGEN })) {
+          const relativa = Math.max(0, j.velocidad - u.v);
+          const lado = Math.sign(j.x - u.x) || 1;
+          this.eventos.push({
+            tipo: 'golpe', chatarra: true, fuerza: Math.min(22, 4 + relativa * 0.35), frenazo: relativa * 0.3,
+            lado, militar: u.militar, x: (u.x + j.x) / 2, z: (u.z + j.z) / 2,
+          });
+          u.tGolpe = 0.8;
+          u.v = Math.max(u.v, j.velocidad * 0.85);
+          u.vx = -lado * (3 + Math.random() * 3);
+          u.vGiro += (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 2);
+        }
+        continue;
+      }
 
       let vObj;
       if (u.retirada || !enJuego) {
@@ -376,48 +453,124 @@ export class Persecucion {
         vObj = j.velocidad + Math.max(-14, Math.min(26, (dz + 0.5) * 0.9));
       }
       vObj = Math.min(cfg.velocidadMax, vObj);
+      if (u.tAturdido > 0) vObj = Math.min(vObj, u.v);
 
-      // Objetivo lateral: de lejos, su carril; de cerca, a su lado y luego encima.
-      let xObj;
+      // --- conducir entre el trafico ---------------------------------------------
+      // Como el trafico: siempre al centro de un carril, solo se cambia si en
+      // el otro hay sitio, y nunca va mas rapido de lo que le deja frenar
+      // detras del de delante. Antes iba por la raya y decidia esquivar o
+      // frenar cada fotograma: dudaba entre las dos cosas y no hacia ninguna a
+      // tiempo. Pegada al jugador se le pone al lado; embistiendo deja de
+      // mirar, y ahi es donde se estrellan.
       const pegado = !u.retirada && enJuego && dz < 12 && dz > -7;
-      if (pegado) {
-        u.tEmbestida -= dt;
-        const lateral = (u.ancho + j.ancho) / 2;
-        xObj = j.x + u.lado * (lateral + 0.25);
-        if (u.tEmbestida <= 0) xObj = j.x + u.lado * (lateral - 0.9);
-      } else {
-        xObj = j.x + u.lado * VIA.anchoCarril * 0.5;
-      }
+      if (pegado) u.tEmbestida -= dt;
+      const embistiendo = pegado && u.tEmbestida <= 0;
+      const enFranja = (o, x) => Math.abs(o.x - x) < (anchoP(o) + u.ancho) / 2 + 0.3;
+      // El primero que hay delante en la franja de `x`, y el hueco hasta el.
+      const delanteEn = (x) => {
+        let o = null, hueco = Infinity;
+        for (const t of obstaculos) {
+          if (t === u || !enFranja(t, x)) continue;
+          const h = (t.z - largoP(t) / 2) - (u.z + u.largo / 2);
+          if (h > -1.5 && h < hueco) { hueco = h; o = t; }
+        }
+        return { o, hueco };
+      };
+      // La mayor velocidad con la que aun puede frenar hasta su ritmo dejando
+      // 4 m (con 14 m/s2: frena a fondo, pero le queda margen hasta los 15).
+      const maxPara = ({ o, hueco }) => (o ? Math.sqrt(vel(o) ** 2 + 2 * 14 * Math.max(0, hueco - 4)) : Infinity);
+      // Un carril tiene sitio si nadie va a lo largo de la unidad, ni delante
+      // a menos de lo que le hace falta para frenar, ni detras viniendo encima.
+      const haySitio = (c) => {
+        const x = carrilX(c);
+        for (const t of obstaculos) {
+          if (t === u || !enFranja(t, x)) continue;
+          const atras = (u.z - u.largo / 2) - (t.z + largoP(t) / 2);
+          if (atras > 3 + Math.max(0, vel(t) - u.v) * 1.5) continue;
+          const cierre = Math.max(0, u.v - vel(t));
+          if ((t.z - largoP(t) / 2) - (u.z + u.largo / 2) < 6 + cierre * cierre / 28) return false;
+        }
+        return true;
+      };
 
-      // Esquivar el trafico: si hay algo delante en su trayectoria, se abre al
-      // carril libre; si no hay, frena detras.
-      let bloqueo = null;
-      for (const t of trafico.vehiculos) {
-        if (!t.vivo) continue;
-        const delante = t.z - u.z;
-        if (delante < -2 || delante > 32 + u.v * 0.4) continue;
-        if (Math.abs(t.x - u.x) < (t.ancho + u.ancho) / 2 + 0.5) { bloqueo = t; break; }
+      // Fuera de la vista, sin cuerpo (ver la cabecera). Se vuelve solida al
+      // acercarse cuando puede frenar a tiempo para lo que tiene delante, o
+      // ya a la altura del jugador; nunca encima de un carro: eso seria un
+      // choque regalado que ademas no se ve venir.
+      if (dz > 25) u.solida = false;
+      else if (!u.solida && !obstaculos.some(t => t !== u && solapanXZ(u, t))) {
+        u.solida = dz <= 12 || maxPara(delanteEn(u.x)) >= u.v - 1;
       }
-      if (bloqueo) {
-        const salida = bloqueo.x + Math.sign(u.x - bloqueo.x || u.lado) * ((bloqueo.ancho + u.ancho) / 2 + 0.9);
-        if (Math.abs(salida) < borde - u.ancho / 2) xObj = salida;
-        else vObj = Math.min(vObj, bloqueo.velocidad);
+      const cj = carrilDe(j.x);
+      const quiere = cj + u.lado >= 0 && cj + u.lado < VIA.carriles ? cj + u.lado : cj - u.lado;
+
+      let xObj;
+      if (!u.solida) {
+        u.carril = quiere;
+        xObj = carrilX(quiere);
+      } else if (pegado) {
+        const lateral = (u.ancho + j.ancho) / 2;
+        xObj = j.x + u.lado * (embistiendo ? lateral - 0.9 : lateral + 0.25);
+        u.carril = carrilDe(xObj);
+      } else {
+        u.carril ??= carrilDe(u.x);
+        u.tDecision = (u.tDecision ?? 0) - dt;
+        if (u.tDecision <= 0) {
+          u.tDecision = 0.25;
+          // Quiere el carril de al lado del jugador.
+          const aqui = maxPara(delanteEn(carrilX(u.carril)));
+          if (aqui < vObj - 2) {
+            // Retenida: al carril de al lado que la deje ir mas rapido.
+            const opciones = [u.carril - 1, u.carril + 1].filter(c => c >= 0 && c < VIA.carriles)
+              .sort((a, b) => Math.abs(a - quiere) - Math.abs(b - quiere));
+            for (const c of opciones) {
+              if (haySitio(c) && maxPara(delanteEn(carrilX(c))) > aqui + 4) { u.carril = c; break; }
+            }
+          } else if (u.carril !== quiere) {
+            const c = u.carril + Math.sign(quiere - u.carril);
+            if (haySitio(c) && maxPara(delanteEn(carrilX(c))) >= Math.min(vObj, aqui) - 1) u.carril = c;
+          }
+        }
+        xObj = carrilX(u.carril);
+      }
+      // Frena para lo que tiene delante donde esta y, si se esta cambiando,
+      // tambien en el carril al que va.
+      if (u.solida && !embistiendo) {
+        vObj = Math.min(vObj, maxPara(delanteEn(u.x)));
+        if (Math.abs(xObj - u.x) > 0.5) vObj = Math.min(vObj, maxPara(delanteEn(xObj)));
+      }
+      // Y no se mete en el costado de nadie que tenga al lado.
+      const s = Math.sign(xObj - u.x);
+      if (s !== 0 && u.solida && !embistiendo) {
+        for (const t of obstaculos) {
+          if (t === u || (t.x - u.x) * s < 0.3) continue;
+          if (t.z + largoP(t) / 2 < u.z - u.largo / 2 - 2 || t.z - largoP(t) / 2 > u.z + u.largo / 2 + 2) continue;
+          const tope = t.x - s * ((anchoP(t) + u.ancho) / 2 + 0.3);
+          xObj = s > 0 ? Math.min(xObj, tope) : Math.max(xObj, tope);
+        }
       }
       xObj = Math.max(-borde + u.ancho / 2 + 0.2, Math.min(borde - u.ancho / 2 - 0.2, xObj));
 
-      const acel = vObj > u.v ? 9 : 12;
+      // Frena con ABS a fondo si hace falta; acelera mas suave.
+      const acel = vObj > u.v ? 9 : 15;
       u.v += Math.max(-acel * dt, Math.min(acel * dt, vObj - u.v));
       u.z += u.v * dt;
       u.distancia += u.v * dt;
-      const vLat = pegado ? 6.5 : 4.5;
+      const vLat = pegado ? 6.5 : 5;
       const dx = Math.max(-vLat * dt, Math.min(vLat * dt, xObj - u.x));
       u.x += dx;
-      u.yaw = Math.atan2(dx / dt, Math.max(4, u.v)) * 0.8;
+      u.vLat = dx / dt;
+      u.yaw = Math.atan2(u.vLat, Math.max(4, u.v)) * 0.8;
+
+      if (u.solida) {
+        this.#contraTrafico(u, trafico);
+        if (!u.chocada) this.#contraChatarra(u);
+        if (u.chocada) continue;
+      }
 
       // --- embestida -----------------------------------------------------------------
       if (!u.retirada && enJuego && u.tGolpe <= 0
-          && solapanXZ({ x: j.x, z: j.z, yaw: j.yaw, largo: j.largo, ancho: j.ancho },
-            { x: u.x, z: u.z, yaw: u.yaw, largo: u.largo + MARGEN, ancho: u.ancho + MARGEN })) {
+          && solapanXZ(cajaJ, { x: u.x, z: u.z, yaw: u.yaw, largo: u.largo + MARGEN, ancho: u.ancho + MARGEN })) {
         // Dano medido para que hagan falta varias embestidas: la primera version
         // quitaba ~30 % por golpe porque llegaban lanzadas desde atras.
         const relativa = Math.abs(u.v - j.velocidad) + Math.abs(dx / dt) * 0.8;
@@ -436,7 +589,7 @@ export class Persecucion {
     // Rafagas cortas desde atras. La probabilidad de impacto cae con la
     // distancia y con la velocidad lateral del jugador: zigzaguear sirve.
     for (const u of this.unidades) {
-      if (!u.activo || u.retirada || !enJuego || !this.activa) continue;
+      if (!u.activo || u.retirada || u.chocada || !enJuego || !this.activa) continue;
       const puede = u.militar || this.tiempo > cfg.disparanPatrullasDesde;
       if (!puede) continue;
       const dz = j.z - u.z;
@@ -466,17 +619,98 @@ export class Persecucion {
     }
     this._jxPrev = j.x;
 
-    // Nunca dos unidades montadas una sobre otra.
+    // Nunca dos unidades montadas una sobre otra (las estrelladas ya chocaron
+    // con las demas en #contraChatarra).
     for (let a = 0; a < this.unidades.length; a++) {
       const ua = this.unidades[a];
-      if (!ua.activo) continue;
+      if (!ua.activo || ua.chocada) continue;
       for (let b = a + 1; b < this.unidades.length; b++) {
         const ub = this.unidades[b];
-        if (!ub.activo) continue;
+        if (!ub.activo || ub.chocada) continue;
         if (Math.abs(ua.z - ub.z) < (ua.largo + ub.largo) / 2 + 1 && Math.abs(ua.x - ub.x) < (ua.ancho + ub.ancho) / 2 + 0.3) {
           if (ua.z < ub.z) ua.v = Math.min(ua.v, ub.v - 2); else ub.v = Math.min(ub.v, ua.v - 2);
         }
       }
+    }
+
+    // El trafico tambien las ve: frena detras y no se les cambia de carril encima.
+    this._obstaculos.length = 0;
+    for (const u of this.unidades) if (u.activo && (u.solida || u.chocada)) this._obstaculos.push(u);
+    trafico.obstaculos = this._obstaculos;
+  }
+
+  /** Choque de una unidad con el trafico, con la misma prueba SAT que el del jugador. */
+  #contraTrafico(u, trafico) {
+    for (const t of trafico.vehiculos) {
+      if (!t.vivo) continue;
+      if (Math.abs(t.z - u.z) > (t.largo + u.largo) / 2 + 1 || Math.abs(t.x - u.x) > (t.ancho + u.ancho) / 2 + 1) continue;
+      if (solapanXZ(u, t)) this.#impacto(u, t, trafico);
+    }
+  }
+
+  /** Una unidad que va persiguiendo se lleva por delante a una ya estrellada. */
+  #contraChatarra(u) {
+    for (const o of this.unidades) {
+      if (o === u || !o.activo || !o.chocada) continue;
+      if (Math.abs(o.z - u.z) > (o.largo + u.largo) / 2 + 1 || Math.abs(o.x - u.x) > (o.ancho + u.ancho) / 2 + 1) continue;
+      if (!solapanXZ(u, o)) continue;
+      const v = u.v;
+      this.#impacto(u, o, null);
+      if (o.z > u.z) {
+        o.v = Math.max(o.v, v * 0.6);
+        o.vGiro += (Math.random() < 0.5 ? -1 : 1) * 2;
+      }
+    }
+  }
+
+  /**
+   * Resuelve el choque de la unidad `u` con `t` (un vehiculo del trafico o
+   * una unidad estrellada). Fuerte, la deja fuera de combate; flojo, rebota.
+   * @param {object|null} trafico para avisar al vehiculo golpeado
+   */
+  #impacto(u, t, trafico) {
+    const dz = t.z - u.z;                       // > 0: el otro va delante
+    const delante = dz > 0;
+    const vOtro = t.velocidad ?? t.v;
+    const rel = u.v - vOtro;                    // > 0: la unidad lo alcanza
+    const impacto = Math.abs(rel) + Math.abs(u.vLat) * 0.6;
+    // Se saca de encima por donde entro: por detras o por delante, o de lado.
+    const largos = (t.largo + u.largo) / 2;
+    if (Math.abs(dz) > largos * 0.55) u.z = t.z - Math.sign(dz) * (largos + 0.15);
+    else u.x = t.x + Math.sign(u.x - t.x || 1) * ((t.ancho + u.ancho) / 2 + 0.12);
+
+    if (u.chocada) {
+      // Chatarra: si le llega el trafico por detras, sale empujada.
+      if (!delante) {
+        u.v = Math.max(u.v, vOtro * 0.9);
+        u.vGiro += (Math.random() - 0.5) * 3;
+        u.vx += Math.sign(u.x - t.x || 1) * 2;
+      } else {
+        u.v = Math.min(u.v, vOtro);
+      }
+      trafico?.golpear(t, delante ? 0 : -vOtro * 0.4, 0.05);
+      return;
+    }
+
+    // Un camion la para con menos; los del Ejercito aguantan mas.
+    const umbral = (u.militar ? 11 : 8) - (t.pesado ? 3 : 0);
+    const contra = t.tipo?.nombre ?? t.modelo?.tipo?.nombre ?? 'vehículo';
+    if (impacto > umbral) {
+      u.chocada = true;
+      u.vGiro = (Math.random() < 0.5 ? -1 : 1) * (2.2 + Math.random() * 2.6);
+      u.vx = Math.sign(u.x - t.x || u.lado) * (2 + Math.random() * 3);
+      u.v = delante ? vOtro * (t.pesado ? 0.35 : 0.65) : Math.max(u.v, vOtro);
+      trafico?.golpear(t, delante ? Math.min(7, rel * 0.25) : -Math.min(9, -rel * 0.5), 0.05 + Math.min(0.1, impacto * 0.005));
+      this.eventos.push({
+        tipo: 'estrellada', militar: u.militar, contra, pesado: !!t.pesado,
+        x: (u.x + t.x) / 2, z: (u.z + t.z) / 2, fuerza: impacto,
+      });
+    } else {
+      // Roce: rebota, levanta el pie un momento y sigue.
+      if (delante) u.v = Math.min(u.v, vOtro - 1);
+      trafico?.golpear(t, delante ? Math.min(2, Math.max(0, rel) * 0.2) : 0, 0.025);
+      if (u.tAturdido <= 0) this.eventos.push({ tipo: 'roce', x: (u.x + t.x) / 2, z: (u.z + t.z) / 2, fuerza: impacto });
+      u.tAturdido = 0.8;
     }
   }
 

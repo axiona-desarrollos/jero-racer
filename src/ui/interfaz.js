@@ -26,6 +26,7 @@ export class Interfaz {
       bSonido: $('#bSonido'),
       persecucion: $('#hPersecucion'), danio: $('#hDanio'), danioB: $('#hDanioB'),
       persSub: $('#hPersecucion small'),
+      multas: $('#hMultas'), multasW: $('#hMultasW'), flash: $('#flash'),
     };
     this._ult = {};
     this._acc = 0;
@@ -63,9 +64,9 @@ export class Interfaz {
       : 'Rompe tu primer récord';
     this.n.mAyuda.innerHTML = movil
       ? (modoDireccion === 'inclinar'
-        ? '<b>Inclina el teléfono</b> como un timón para girar. <b>GAS</b> a la derecha, <b>FRENO</b> a la izquierda y <b>F. MANO</b> para derrapar. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía.'
-        : '<b>◀ ▶</b> para girar, <b>GAS</b> y <b>FRENO</b> a la derecha, <b>F. MANO</b> para derrapar. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía.')
-      : '<b>W / ↑</b> acelerar · <b>S / ↓</b> frenar · <b>A D / ← →</b> girar · <b>ESPACIO</b> freno de mano · <b>C</b> cámara · <b>ESC</b> pausa · <b>M</b> sonido. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía; baja de 170 para que te dejen. También con control de consola.';
+        ? '<b>Inclina el teléfono</b> como un timón para girar. <b>GAS</b> a la derecha, <b>FRENO</b> a la izquierda y <b>F. MANO</b> para derrapar. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía. Ojo con las <b>fotomultas</b>: a 50 y 70 km/h ya te cogen.'
+        : '<b>◀ ▶</b> para girar, <b>GAS</b> y <b>FRENO</b> a la derecha, <b>F. MANO</b> para derrapar. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía. Ojo con las <b>fotomultas</b>.')
+      : '<b>W / ↑</b> acelerar · <b>S / ↓</b> frenar · <b>A D / ← →</b> girar · <b>ESPACIO</b> freno de mano · <b>C</b> cámara · <b>ESC</b> pausa · <b>M</b> sonido. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía; baja de 170 para que te dejen. Ojo con las <b>fotomultas</b>: a 50 y 70 km/h ya te cogen. También con control de consola.';
     this.n.oDireccion.hidden = !movil;
     this.opciones({ modoDireccion, sonido, camara });
   }
@@ -121,6 +122,8 @@ export class Interfaz {
       this.n.danioB.style.width = `${Math.round(d.danio)}%`;
       this.n.danio.classList.toggle('alto', d.danio >= 70);
     }
+    this.n.multasW.hidden = !(d.multas > 0);
+    if (d.multas > 0) this.#texto('multas', String(d.multas));
     const enCombo = d.combo > 1;
     this.n.combo.classList.toggle('on', enCombo);
     if (enCombo) {
@@ -135,15 +138,27 @@ export class Interfaz {
     this.n[clave].textContent = valor;
   }
 
-  /** Aviso flotante en el centro (rozon, record...). */
-  aviso(titulo, sub = '', clase = '') {
+  /**
+   * Aviso flotante en el centro (rozon, record...).
+   * @param {number} ms cuanto dura; los de frase larga necesitan mas para leerse
+   */
+  aviso(titulo, sub = '', clase = '', ms = 1200) {
     const a = document.createElement('div');
     a.className = 'aviso ' + clase;
     a.textContent = titulo;
     if (sub) { const s = document.createElement('small'); s.textContent = sub; a.appendChild(s); }
+    if (ms !== 1200) a.style.animationDuration = `${(ms - 50) / 1000}s`;
     this.n.avisos.appendChild(a);
     while (this.n.avisos.children.length > 3) this.n.avisos.firstChild.remove();
-    setTimeout(() => a.remove(), 1200);
+    setTimeout(() => a.remove(), ms);
+  }
+
+  /** Fogonazo blanco de la fotomulta sobre toda la pantalla. */
+  flash() {
+    const el = this.n.flash;
+    el.classList.remove('on');
+    void el.offsetWidth;            // reinicia la animacion si ya estaba puesta
+    el.classList.add('on');
   }
 
   // ------------------------------------------------------------- pausa / fin
@@ -164,6 +179,7 @@ export class Interfaz {
     $('#fRozones').textContent = String(r.rozones);
     $('#fCombo').textContent = r.mejorCombo > 0 ? `x${r.mejorCombo}` : '—';
     $('#fVel').textContent = String(Math.round(r.velMax));
+    $('#fMultas').textContent = String(r.fotomultas ?? 0);
     $('#fRecord').innerHTML = `RÉCORD <b>${fmt(r.recordPuntos)}</b> PTS · <b>${r.recordKm.toFixed(2)}</b> KM`;
   }
   ocultarFin() { this.n.fin.hidden = true; }

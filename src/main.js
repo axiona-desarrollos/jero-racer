@@ -30,6 +30,7 @@ import {
 import { instalarCielo, alinearSol } from './world/cielo.js';
 import { Autopista } from './world/autopista.js';
 import { Paisaje } from './world/paisaje.js';
+import { Fotomultas, camarasEntre } from './world/fotomultas.js';
 import { Trafico } from './traffic/trafico.js';
 import { Persecucion, PERSECUCION } from './game/persecucion.js';
 import { FRASES, una } from './ui/frases.js';
@@ -45,6 +46,7 @@ import { Hud } from './ui/hud.js';
 import { Interfaz } from './ui/interfaz.js';
 import { EngineAudio } from './audio/engine.js';
 import { VehicleFX } from './vfx/vehicle-fx.js';
+import { ParticleSystem } from './vfx/particles.js';
 
 const STEP = 1 / 60;
 const PARAMS = new URLSearchParams(location.search);
@@ -135,7 +137,10 @@ const audio = new EngineAudio();
 audio.enabled = prefs.sonido;
 
 let vehicle, loop, hud, sun, fx, director, ciudad = null, tactil = null, escala = null;
-let autopista = null, paisaje = null, trafico = null, carrera = null, persecucion = null;
+let autopista = null, paisaje = null, trafico = null, carrera = null, persecucion = null, fotomultas = null;
+/** Posicion del paso anterior, para saber que camaras se cruzaron. */
+let zFoto = null;
+let humoNegro = null;
 /** Avisos que solo salen una vez por partida (velocidades, dano). */
 const yaDicho = new Set();
 let world = null;
@@ -155,6 +160,15 @@ let tel = null;
 const DIR_SOL = new THREE.Vector3(28, 38, 18).normalize();
 const DIST_SOL = 50;
 let wakeLock = null;
+
+// Solo en desarrollo: acceso desde la consola para montar escenas de prueba
+// (una patrulla detras de un camion, el coche antes de una camara...).
+if (import.meta.env.DEV) {
+  window.__jr = {
+    get vehicle() { return vehicle; }, get trafico() { return trafico; }, get persecucion() { return persecucion; },
+    get carrera() { return carrera; }, get fotomultas() { return fotomultas; }, get estado() { return estado; }, get fx() { return fx; }, ui,
+  };
+}
 
 async function main() {
   boot('Iniciando motor de física…', 0.06);
@@ -183,6 +197,7 @@ async function main() {
     boot('Sembrando el valle…', 0.2);
     await new Promise(r => setTimeout(r, 16));
     paisaje = new Paisaje(scene, CAL);
+    fotomultas = new Fotomultas(scene);
     boot('Llenando la vía de tráfico…', 0.26);
     await new Promise(r => setTimeout(r, 16));
     trafico = new Trafico(scene, RAPIER, world, { fisico: CAL.pinturaLaca, sombras: CAL.nombre === 'alta' });
@@ -249,6 +264,10 @@ async function main() {
   vehicle = new Vehicle(RAPIER, world, gltf.scene, { spawn });
   SPAWN.copy(spawn);
   fx = new VehicleFX(scene, vehicle);
+  // Humo negro de las patrullas estrelladas: mas espeso y alto que el de las
+  // llantas, que salia dentro de la carroceria y la propia patrulla lo tapaba.
+  humoNegro = new ParticleSystem(220, { size: 1.4, sizeGrow: 1.4, drag: 0.975, gravity: 1.0, opacity: 0.6, soft: 0.5 });
+  scene.add(humoNegro.points);
 
   hud = new Hud($('#hud'));
   $('#hud').hidden = !PARAMS.has('telemetria');
@@ -478,7 +497,9 @@ let fraseFin = '';
 
 async function compartir() {
   const pts = Math.round(carrera?.puntos ?? 0).toLocaleString('es-CO');
-  const texto = `Hice ${pts} puntos en JERO RACER esquivando tractomulas y a la tomba a ${Math.round(carrera?.velocidadMax ?? 0)} km/h. ¿Me ganas? Síguenos en TikTok: @jerofernandez222, @esteban.takamura y @axiona.softwareia`;
+  const n = carrera?.fotomultas ?? 0;
+  const multas = n ? ` y me cogieron ${n} fotomulta${n > 1 ? 's' : ''} 📸` : '';
+  const texto = `Hice ${pts} puntos en JERO RACER esquivando tractomulas y a la tomba a ${Math.round(carrera?.velocidadMax ?? 0)} km/h${multas}. ¿Me ganas? Síguenos en TikTok: @jerofernandez222, @esteban.takamura y @axiona.softwareia`;
   const url = 'https://jeroracer.axionasoft.com';
   try {
     if (navigator.share) { await navigator.share({ title: 'JERO RACER', text: texto, url }); return; }
@@ -620,6 +641,7 @@ function actualizarAutopista(dt, fwdKmh) {
   const p = vehicle.body.translation();
   autopista.actualizar(p.z);
   paisaje.actualizar(p.z);
+  fotomultas.actualizar(p.z);
   trafico.actualizar(dt, { x: p.x, z: p.z, velocidad: Math.max(0, fwdKmh / 3.6) });
 
   for (const ev of trafico.eventos) pendientes.push(ev);
@@ -636,7 +658,8 @@ function actualizarAutopista(dt, fwdKmh) {
     // Lo fisico se aplica aqui, dentro del paso; lo de la interfaz, al pintar.
     if (ev.tipo === 'golpe' && enJuego) {
       const m = vehicle.mass;
-      vehicle.body.applyImpulse({ x: ev.lado * m * (1.0 + ev.fuerza * 0.045), y: 0, z: 0 }, true);
+      // Contra una estrellada, ademas del empujon, el frenazo del totazo.
+      vehicle.body.applyImpulse({ x: ev.lado * m * (1.0 + ev.fuerza * 0.045), y: 0, z: -m * (ev.frenazo ?? 0) }, true);
       const w = vehicle.body.angvel();
       vehicle.body.setAngvel({ x: w.x, y: w.y + ev.lado * 0.35, z: w.z }, true);
       if (carrera.danar(ev.fuerza, ev.militar ? 'el Ejército' : 'la Policía')) alDetener();
@@ -644,10 +667,14 @@ function actualizarAutopista(dt, fwdKmh) {
       if (carrera.danar(PERSECUCION.danoBala, ev.militar ? 'el Ejército' : 'la Policía')) alDetener();
     } else if (ev.tipo === 'fin') {
       ev.bono = carrera.bonoEscape(ev.duracion);
+    } else if (ev.tipo === 'estrellada' && enJuego) {
+      ev.bono = carrera.derribo(ev.militar);
     }
     pendientes.push({ persecucion: ev });
   }
   persecucion.eventos.length = 0;
+  const zFotoAntes = zFoto;
+  zFoto = p.z;
   if (estado !== 'juego') return;
 
   const choque = carrera.estado === ESTADO.RODANDO
@@ -657,6 +684,19 @@ function actualizarAutopista(dt, fwdKmh) {
   const termino = carrera.actualizar(dt, p.z, choque, vehicle.speedKmh);
   trafico.fijarDificultad(carrera.km);
   if (termino) alChocar(choque, p);
+  else if (zFotoAntes != null && carrera.estado === ESTADO.RODANDO) revisarFotomultas(zFotoAntes, p.z, Math.abs(fwdKmh));
+}
+
+/** Camaras cruzadas en este paso: por encima del limite, multa. */
+function revisarFotomultas(z0, z1, kmh) {
+  for (const c of camarasEntre(z0, z1)) {
+    if (kmh > c.limite) {
+      fotomultas.disparar(c);
+      pendientes.push({ fotomulta: { ...c, kmh, n: carrera.fotomulta() } });
+    } else if (!c.oculta) {
+      pendientes.push({ fotomulta: { ...c, kmh, salvada: carrera.salvada() } });
+    }
+  }
 }
 
 // --------------------------------------------------------------- presentar
@@ -664,6 +704,7 @@ function presentar(alpha, dt) {
   vehicle.render(alpha);
   if (trafico) trafico.presentar(alpha);
   if (persecucion) persecucion.presentar(alpha, dt);
+  if (fotomultas) fotomultas.presentar(dt);
   escala?.medir(dt);
 
   // --- teclado de interfaz ---------------------------------------------------
@@ -723,7 +764,7 @@ function presentar(alpha, dt) {
           velocidadChoque: carrera.velocidadAlChocar,
           puntos: carrera.puntos, km: carrera.km,
           rozones: carrera.rozones, mejorCombo: carrera.mejorCombo,
-          velMax: carrera.velocidadMax,
+          velMax: carrera.velocidadMax, fotomultas: carrera.fotomultas,
           recordPuntos: carrera.recordPuntos, recordKm: carrera.recordKm,
         });
       }
@@ -734,6 +775,7 @@ function presentar(alpha, dt) {
   while (pendientes.length) {
     const ev = pendientes.shift();
     if (ev.persecucion) { avisoPersecucion(ev.persecucion); continue; }
+    if (ev.fotomulta) { avisoFotomulta(ev.fotomulta); continue; }
     const cerca = Math.max(0, (3 - ev.hueco) / 3);
     audio.paso(ev.lado, cerca * Math.min(1, Math.abs(ev.relativa) / 30), ev.pesado);
     if (ev.bono) {
@@ -757,9 +799,11 @@ function presentar(alpha, dt) {
   }
   sonidoPersecucion();
   humoDeDanio(dt);
+  humoDePatrullas(dt);
 
   if (tel) {
     fx.update(tel, dt);
+    humoNegro.update(dt);
     audio.update(tel, dt);
   }
 
@@ -783,6 +827,7 @@ function presentar(alpha, dt) {
       combo: carrera.combo, combo01: carrera.tCombo / VENTANA_COMBO,
       persecucion: persecucion?.activa && estado === 'juego', danio: carrera.danio,
       distanciaPatrulla: persecucion?.activa ? persecucion.cercana.distancia : Infinity,
+      multas: carrera.fotomultas,
     }, dt);
   }
 }
@@ -808,6 +853,20 @@ function avisoPersecucion(ev) {
     case 'tiroteo':
       ui.aviso(una(FRASES.tiroteo), '¡le están disparando!', 'rojo');
       break;
+    case 'estrellada': {
+      const d = distanciaAlJugador(ev);
+      audio.golpe(Math.max(0.2, 1 - d / 140) * Math.min(1, 0.5 + ev.fuerza / 30));
+      if (d < 40) director.sacudir(0.05 + (40 - d) * 0.003);
+      chispazo(ev, 34);
+      if (estado === 'juego') {
+        const titulo = ev.militar ? una(FRASES.estrelladaEjercito) : una(FRASES.estrellada);
+        ui.aviso(titulo, `contra ${articulo(ev.contra)}${ev.bono ? ` · +${ev.bono}` : ''}`, 'ambar');
+      }
+      break;
+    }
+    case 'roce':
+      if (distanciaAlJugador(ev) < 60) { audio.golpe(0.25); chispazo(ev, 10); }
+      break;
     case 'golpe': {
       audio.golpe(ev.fuerza / 34);
       director.sacudir(0.1 + ev.fuerza * 0.008);
@@ -817,7 +876,7 @@ function avisoPersecucion(ev) {
           (Math.random() - 0.5) * 8, 1 + Math.random() * 3, (Math.random() - 0.5) * 6,
           0.3 + Math.random() * 0.4, 0.05 + Math.random() * 0.04, 2.4, 1.2, 0.3);
       }
-      ui.aviso(una(FRASES.golpe), `daño ${Math.round(carrera.danio)} %`, 'rojo');
+      ui.aviso(ev.chatarra ? '¡SE COMIÓ LA PATRULLA ESTRELLADA!' : una(FRASES.golpe), `daño ${Math.round(carrera.danio)} %`, 'rojo');
       break;
     }
     case 'disparo': {
@@ -835,6 +894,66 @@ function avisoPersecucion(ev) {
         director.sacudir(0.04);
       }
       break;
+    }
+  }
+}
+
+function distanciaAlJugador(ev) {
+  const p = vehicle.body.translation();
+  return Math.hypot(ev.x - p.x, ev.z - p.z);
+}
+
+function chispazo(ev, n) {
+  for (let i = 0; i < n; i++) {
+    fx.chispas.emit(ev.x + (Math.random() - 0.5) * 1.2, 0.4 + Math.random() * 0.7, ev.z + (Math.random() - 0.5) * 2,
+      (Math.random() - 0.5) * 9, 1 + Math.random() * 4, (Math.random() - 0.3) * 8,
+      0.3 + Math.random() * 0.5, 0.05 + Math.random() * 0.04, 2.4, 1.2, 0.3);
+  }
+}
+
+/**
+ * Avisos de las camaras. Primera: "te cogio". Desde la segunda: "te cogio
+ * otra" con la frase de la plata. Las escondidas tienen su propio chiste.
+ */
+function avisoFotomulta(f) {
+  if (f.salvada != null) {
+    if (f.salvada) ui.aviso('¡SE SALVÓ DE LA FOTOMULTA!', `pasó juicioso a ${Math.round(f.kmh)} km/h · +${f.salvada}`, 'ambar');
+    return;
+  }
+  if (!f.n) return;
+  ui.flash();
+  audio.fotomulta(f.n);
+  if (navigator.vibrate) navigator.vibrate([0, 35, 70, 35]);
+  let titulo, sub;
+  if (f.oculta) {
+    titulo = 'JUMMM… TE COGIÓ LA QUE NI AVISO TIENE';
+    sub = yaDicho.has('multaOculta') ? una(FRASES.multaOculta) : FRASES.multaOculta[0];
+    yaDicho.add('multaOculta');
+  } else if (f.n === 1) {
+    titulo = '¡TE COGIÓ LA FOTOMULTA!';
+    sub = `ibas a ${Math.round(f.kmh)} km/h y el límite es ${f.limite}`;
+  } else {
+    titulo = '¡TE COGIÓ OTRA FOTOMULTA!';
+    sub = yaDicho.has('multaOtra') ? una(FRASES.multaOtra) : FRASES.multaOtra[0];
+    yaDicho.add('multaOtra');
+  }
+  if (f.n > 1) sub = `Van ${f.n}. ${sub}`;
+  ui.aviso(titulo, sub, 'multa', 3400);
+}
+
+/** Humo de las unidades estrelladas. */
+function humoDePatrullas(dt) {
+  if (!persecucion || !humoNegro) return;
+  for (const u of persecucion.unidades) {
+    if (!u.activo || !u.chocada) continue;
+    // Columna gruesa y oscura desde el capo: tiene que verse a 50 m.
+    u.acumHumo += dt * 18;
+    while (u.acumHumo >= 1) {
+      u.acumHumo -= 1;
+      const tono = 0.1 + Math.random() * 0.08;
+      humoNegro.emit(u.x + (Math.random() - 0.5) * 0.8, 1.9, u.z + (Math.random() - 0.5) * 1.2,
+        (Math.random() - 0.5) * 0.9, 2.2 + Math.random() * 1.4, (Math.random() - 0.5) * 0.9,
+        1.7 + Math.random() * 1.0, 1.2 + Math.random() * 0.7, tono, tono, tono * 1.05);
     }
   }
 }
@@ -907,10 +1026,12 @@ function reiniciar() {
     carrera.reiniciar(SPAWN.z);
     persecucion.reiniciar();
     yaDicho.clear();
+    zFoto = null;
   }
   vehicle.respawn(SPAWN, 0);
   tiempoVolcado = 0;
   if (fx) fx.clear();
+  humoNegro?.clear();
   steering.reset();
   throttleM.reset();
   brakeM.reset();

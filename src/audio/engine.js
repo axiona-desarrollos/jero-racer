@@ -564,6 +564,44 @@ export class EngineAudio {
     o.start(now); o.stop(now + 0.16);
   }
 
+  /**
+   * Fotomulta: obturador doble y el pitido de la camara. Desde la segunda,
+   * la caja registradora: lo que debe es plata.
+   * @param {number} cuantas multas lleva la tirada
+   */
+  fotomulta(cuantas = 1) {
+    if (!this.ready || !this.enabled) return;
+    const ctx = this.ctx, now = this.ahora;
+    for (const [t, f] of [[0, 3400], [0.09, 2300]]) {
+      const s = ctx.createBufferSource(); s.buffer = this.blanco;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 1.3;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now + t);
+      g.gain.exponentialRampToValueAtTime(0.4, now + t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.05);
+      s.connect(bp); bp.connect(g); g.connect(this.bus);
+      s.start(now + t, Math.random() * 0.2); s.stop(now + t + 0.07);
+    }
+    const tono = (t, f, d, vol, tipo = 'square') => {
+      const o = ctx.createOscillator(); o.type = tipo; o.frequency.value = f;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4200;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now + t);
+      g.gain.exponentialRampToValueAtTime(vol, now + t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + t + d);
+      o.connect(lp); lp.connect(g); g.connect(this.bus);
+      o.start(now + t); o.stop(now + t + d + 0.02);
+    };
+    tono(0.2, 2093, 0.09, 0.05);
+    tono(0.33, 2093, 0.09, 0.05);
+    if (cuantas >= 2) {
+      // Campanita de caja registradora: dos parciales metalicos.
+      tono(0.5, 2637, 0.5, 0.09, 'sine');
+      tono(0.5, 3951, 0.35, 0.05, 'sine');
+      tono(0.58, 3520, 0.6, 0.08, 'sine');
+    }
+  }
+
   setEnabled(on) {
     this.enabled = on;
     if (this.ready) this.master.gain.setTargetAtTime(on ? 0.9 : 0, this.ctx.currentTime, 0.08);

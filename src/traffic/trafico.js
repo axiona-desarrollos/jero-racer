@@ -18,7 +18,10 @@
    carril de al lado, pone la direccional y cambia. La direccional NO es
    adorno: es el aviso que permite al jugador anticipar el cambio y que el
    juego sea justo. Tambien ven al jugador: nadie lo embiste por detras ni se
-   le mete encima de golpe.
+   le mete encima de golpe. Y ven a la Policia (`obstaculos`): frenan detras
+   de una patrulla estrellada y no se cambian de carril delante de una que
+   viene a 250 km/h. Si una los golpea, se sacuden, frenan y prenden las
+   estacionarias (`golpear`).
 
    DOS SISTEMAS DE COLISION, A PROPOSITO
    La FISICA de Rapier existe para el TACTO: el coche rebota y trompea contra
@@ -252,7 +255,7 @@ export class Trafico {
         xOrigen: 0, xObjetivo: 0, tCambio: 1,
         velocidad: 0, v0: 0, freno: 0, yaw: 0, yawPrev: 0,
         senal: 0, tSenal: 0, proximaDecision: 0,
-        distancia: 0, distanciaPrev: 0, relPrev: 0,
+        distancia: 0, distanciaPrev: 0, relPrev: 0, sacudida: 0, tSusto: 0,
         tinte1: new THREE.Color(0xcccccc), tinte2: new THREE.Color(0xeeeeee), edad: 10,
         vivo: false,
       });
@@ -271,6 +274,30 @@ export class Trafico {
     /** Rozones del ultimo paso (los consume la partida). */
     this.eventos = [];
     this.jugador = { x: 0, z: 0, velocidad: 0, ancho: 1.95, largo: 4.45 };
+    /** Unidades de la persecucion: {x, z, largo, ancho, v}. Las pone Persecucion. */
+    this.obstaculos = [];
+  }
+
+  /**
+   * Golpe desde fuera: una patrulla que se lo lleva por delante. El vehiculo
+   * cambia de velocidad, se sacude y el conductor, asustado, va despacio un
+   * rato con las estacionarias.
+   * @param {number} dv cambio de velocidad, m/s
+   * @param {number} sacudida amplitud del bamboleo, radianes
+   */
+  golpear(v, dv = 0, sacudida = 0.1) {
+    v.velocidad = Math.max(0, v.velocidad + dv);
+    // Los pesados apenas se mueven: una mula de 20 m girando 10 grados barre
+    // el carril de al lado.
+    v.sacudida = Math.min(0.15, v.sacudida + sacudida * (v.pesado ? 0.4 : 1));
+    v.tSusto = 4;
+  }
+
+  /** ¿La unidad `o` invade el carril `c`? */
+  #obstaculoEn(o, c) {
+    // Con su ancho en planta: una patrulla atravesada tapa mas que una derecha.
+    const ancho = Math.abs(Math.sin(o.yaw)) * o.largo + Math.abs(Math.cos(o.yaw)) * o.ancho;
+    return Math.abs(o.x - carrilX(c)) < VIA.anchoCarril / 2 + ancho / 2 - 0.15;
   }
 
   /**
@@ -353,6 +380,7 @@ export class Trafico {
       v.velocidad = lider && huecoLider < 160 ? Math.min(v.v0, lider.velocidad) : v.v0;
       v.tCambio = 1;
       v.senal = 0; v.tSenal = 0; v.freno = 0;
+      v.sacudida = 0; v.tSusto = 0;
       v.yaw = v.yawPrev = 0;
       v.proximaDecision = this.tiempo + 0.5 + this.#azar() * 1.5;
       v.edad = 0;
@@ -394,6 +422,11 @@ export class Trafico {
       const d = (o.z - o.largo / 2) - (v.z + v.largo / 2);
       if (o.z > v.z && d < hueco) { hueco = d; vel = o.velocidad; }
     }
+    for (const o of this.obstaculos) {
+      if (o.z <= v.z || !this.#obstaculoEn(o, c)) continue;
+      const d = (o.z - o.largo / 2) - (v.z + v.largo / 2);
+      if (d < hueco) { hueco = d; vel = Math.max(0, o.v); }
+    }
     const j = this.jugador;
     if (this.#jugadorEn(c) && j.z > v.z) {
       const d = (j.z - j.largo / 2) - (v.z + v.largo / 2);
@@ -414,6 +447,17 @@ export class Trafico {
       } else {
         const cierre = Math.max(0, o.velocidad - v.velocidad);
         if (-d - largos < Math.max(12, o.velocidad * 0.8 + cierre * 2.2)) return false;
+      }
+    }
+    for (const o of this.obstaculos) {
+      if (!this.#obstaculoEn(o, c)) continue;
+      const d = o.z - v.z;
+      const largos = (o.largo + v.largo) / 2;
+      if (d >= 0) {
+        if (d - largos < Math.max(14, v.velocidad * 0.9)) return false;
+      } else {
+        const cierre = Math.max(0, o.v - v.velocidad);
+        if (-d - largos < Math.max(12, o.v * 0.8 + cierre * 2.2)) return false;
       }
     }
     // Nunca se le mete encima al jugador: ni por delante cerca ni por detras.
@@ -452,7 +496,10 @@ export class Trafico {
         const otro = this.#lider(v, v.carrilOrigen);
         if (otro.hueco < lider.hueco) lider = otro;
       }
-      let acc = aceleracionIDM(v.velocidad, v.v0, lider.hueco, v.velocidad - lider.vel, a);
+      // Recien golpeado va asustado, mucho mas despacio.
+      if (v.tSusto > 0) v.tSusto = Math.max(0, v.tSusto - dt);
+      const v0 = v.tSusto > 0 ? v.v0 * 0.55 : v.v0;
+      let acc = aceleracionIDM(v.velocidad, v0, lider.hueco, v.velocidad - lider.vel, a);
       acc = Math.max(-9, Math.min(a, acc));
       v.velocidad = Math.max(0, v.velocidad + acc * dt);
       const frenoObjetivo = acc < -0.6 ? Math.min(1, -acc / 3) : 0;
@@ -515,6 +562,13 @@ export class Trafico {
           // Al llegar al carril nuevo se adapta a su ritmo.
           v.v0 = v.v0 * 0.6 + this.#velocidadDeseada(v, v.carril) * 0.4;
         }
+      }
+      // Bamboleo tras un golpe, encima del giro del cambio de carril.
+      if (v.sacudida > 0) {
+        v.sacudida = Math.max(0, v.sacudida - dt * 0.4);
+        v.yaw = (v.tCambio < 1 ? v.yaw : 0) + Math.sin(this.tiempo * 9 + v.id) * v.sacudida;
+      } else if (v.tCambio >= 1) {
+        v.yaw = 0;
       }
 
       // --- rozones: el jugador acaba de pasar a su lado ----------------------
@@ -594,7 +648,9 @@ export class Trafico {
       a.tinte2.setXYZ(slot, v.tinte2.r, v.tinte2.g, v.tinte2.b);
       // Luces: freno, y la direccional del lado al que va. senal +1 = hacia
       // +X, que es la izquierda del vehiculo.
-      a.estado.setXYZ(slot, v.freno, v.senal > 0 ? parpadeo : 0, v.senal < 0 ? parpadeo : 0);
+      // Asustado: estacionarias, las dos direccionales a la vez.
+      if (v.tSusto > 0) a.estado.setXYZ(slot, Math.max(v.freno, 0.3), parpadeo, parpadeo);
+      else a.estado.setXYZ(slot, v.freno, v.senal > 0 ? parpadeo : 0, v.senal < 0 ? parpadeo : 0);
 
       // Sombra de contacto, algo mayor que la planta.
       this._m4.compose(this._v3.set(x, 0.02, z), this._q, this._esc.set(v.ancho * 1.22 * k, 1, v.largo * 1.08 * k));
