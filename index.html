@@ -18,7 +18,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icono-192.png" type="image/png">
-<link rel="apple-touch-icon" href="icono-192.png">
+<link rel="apple-touch-icon" href="icono-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Russo+One&display=swap" rel="stylesheet">
@@ -168,6 +168,15 @@
   .t-der{left:calc(30px + var(--sa-l) + clamp(84px,13vw,110px))}
   .tactil[data-modo="inclinar"] .t-izq,.tactil[data-modo="inclinar"] .t-der{display:none}
   .tactil[data-modo="botones"] .t-freno{left:auto;right:calc(30px + var(--sa-r) + clamp(96px,15vw,132px))}
+  /* Freno de mano: junto al gas, al alcance del mismo pulgar. En modo botones
+     va encima del freno, que ocupa ese sitio. */
+  .t-mano{right:calc(30px + var(--sa-r) + clamp(96px,15vw,132px));bottom:calc(18px + var(--sa-b));
+    width:clamp(78px,11vw,104px);height:clamp(84px,19vh,118px);font-size:12px;letter-spacing:1px;
+    border-color:rgba(255,182,72,.45)}
+  .t-mano b{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;
+    border:2px solid rgba(255,182,72,.8);color:#ffb648;font-size:18px;font-family:var(--titulo)}
+  .t-mano.activo{background:rgba(255,182,72,.28);border-color:#ffb648}
+  .tactil[data-modo="botones"] .t-mano{bottom:calc(30px + var(--sa-b) + clamp(100px,22vh,140px))}
 
   #brand{position:fixed;right:calc(16px + var(--sa-r));bottom:calc(12px + var(--sa-b));font-size:11px;color:rgba(232,238,248,.45);
     letter-spacing:3px;z-index:7;pointer-events:none;font-weight:700}
@@ -235,7 +244,9 @@
       <button class="op" id="oSonido">SONIDO: <span>SÍ</span></button>
       <button class="op" id="oDireccion" hidden>DIRECCIÓN: <span>INCLINAR</span></button>
       <button class="op" id="oCamara">CÁMARA: <span>PERSECUCIÓN</span></button>
+      <button class="op" id="oInstalar" hidden><span>⤓</span> INSTALAR APP</button>
     </div>
+    <div class="girar" id="mInstalarIOS" hidden style="display:block">Para instalarla en el iPhone: toca <b>Compartir</b> y luego <b>Agregar a inicio</b>.</div>
     <div class="girar">↻ Gira el teléfono en horizontal para jugar mejor</div>
     <div class="pie">Un juego de <a href="https://axionasoft.com" target="_blank" rel="noopener">Axiona Desarrollos Inteligentes</a> · Sabaneta, Colombia<br>
       Deportivo: «Car Concept», Khronos Group (CC BY 4.0) · Tráfico y escenario modelados por Axiona</div>

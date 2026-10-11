@@ -1,17 +1,20 @@
 {
+  "id": "/",
   "name": "JERO RACER · Autopista infinita",
   "short_name": "Jero Racer",
   "description": "Esquiva carros, buses y tractomulas a toda velocidad en una autopista antioqueña.",
   "lang": "es-CO",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "/?app=1",
+  "scope": "/",
   "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
   "orientation": "landscape",
   "background_color": "#0a0e14",
   "theme_color": "#0a0e14",
+  "categories": ["games"],
   "icons": [
-    { "src": "icono-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icono-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icono-adaptable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

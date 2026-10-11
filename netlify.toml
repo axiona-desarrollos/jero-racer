@@ -29,3 +29,11 @@
   for = "/manifest.webmanifest"
   [headers.values]
     Content-Type = "application/manifest+json"
+
+# El service worker nunca se cachea: si no, una version nueva tardaria dias
+# en llegar a los telefonos que ya tienen la app instalada.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Service-Worker-Allowed = "/"

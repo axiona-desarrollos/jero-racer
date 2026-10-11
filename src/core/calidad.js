@@ -18,15 +18,18 @@
 
 export const NIVELES = Object.freeze({
   alta: {
-    nombre: 'alta', pixelMax: 2, sombraMapa: 2048, sombraSuave: true,
+    nombre: 'alta', pixelMax: 2, pixelMin: 1, sombraMapa: 2048, sombraSuave: true,
     pinturaLaca: true, firme: 2048, transmision: true, arbolesPorTramo: 46,
   },
+  // En movil la densidad de pixel manda en la nitidez mas que cualquier otra
+  // cosa: a 1x en una pantalla de 3x todo se ve pixelado. Se pide 2x y la
+  // escala dinamica baja si el telefono no llega, pero nunca de 1x.
   media: {
-    nombre: 'media', pixelMax: 1.5, sombraMapa: 1024, sombraSuave: false,
-    pinturaLaca: true, firme: 1024, transmision: false, arbolesPorTramo: 30,
+    nombre: 'media', pixelMax: 2, pixelMin: 1, sombraMapa: 1024, sombraSuave: false,
+    pinturaLaca: true, firme: 2048, transmision: false, arbolesPorTramo: 30,
   },
   baja: {
-    nombre: 'baja', pixelMax: 1.0, sombraMapa: 1024, sombraSuave: false,
+    nombre: 'baja', pixelMax: 1.5, pixelMin: 0.9, sombraMapa: 1024, sombraSuave: false,
     pinturaLaca: false, firme: 1024, transmision: false, arbolesPorTramo: 18,
   },
 });
@@ -52,10 +55,13 @@ export function elegirCalidad() {
   const forzado = new URLSearchParams(location.search).get('calidad');
   if (forzado && NIVELES[forzado]) return NIVELES[forzado];
   if (!esMovil()) return NIVELES.alta;
-  // Moviles con poca memoria o pocos nucleos: gama baja.
+  // Safari no expone la memoria y en iPhone informa pocos nucleos aunque sea
+  // un A16: con el criterio de Android caia en "baja" y se veia pixelado.
+  if (esIOS()) return NIVELES.media;
+  // Solo los Android de verdad modestos van a gama baja.
   const memoria = navigator.deviceMemory ?? 4;
   const nucleos = navigator.hardwareConcurrency ?? 4;
-  if (memoria <= 3 || nucleos <= 4) return NIVELES.baja;
+  if (memoria <= 2 || nucleos <= 2) return NIVELES.baja;
   return NIVELES.media;
 }
 
@@ -72,10 +78,11 @@ export class EscalaDinamica {
    * @param {number} maximo densidad de pixel tope
    * @param {(nueva:number)=>void} alCambiar
    */
-  constructor(renderer, maximo, alCambiar) {
+  constructor(renderer, maximo, alCambiar, minimo = 1) {
     this.renderer = renderer;
     this.maximo = maximo;
-    this.minimo = Math.min(0.6, maximo);
+    // Por debajo de 1x la imagen se deshace: mejor unos fotogramas menos.
+    this.minimo = Math.min(minimo, maximo);
     this.actual = maximo;
     this.alCambiar = alCambiar;
     this.media = 1 / 60;
@@ -93,8 +100,8 @@ export class EscalaDinamica {
 
     const fps = 1 / this.media;
     let nueva = this.actual;
-    if (fps < 42) nueva = Math.max(this.minimo, this.actual - 0.15);
-    else if (fps > 57 && this.desdeCambio > 4) nueva = Math.min(this.maximo, this.actual + 0.1);
+    if (fps < 38) nueva = Math.max(this.minimo, this.actual - 0.15);
+    else if (fps > 55 && this.desdeCambio > 4) nueva = Math.min(this.maximo, this.actual + 0.1);
     if (Math.abs(nueva - this.actual) > 1e-3) {
       this.actual = +nueva.toFixed(2);
       this.desdeCambio = 0;

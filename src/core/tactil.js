@@ -140,7 +140,7 @@ export class ControlTactil {
     this.raiz = raiz;
     this.modo = o.modo ?? 'inclinar';
     this.inclinacion = new Inclinacion();
-    this.pulsado = { gas: false, freno: false, izq: false, der: false };
+    this.pulsado = { gas: false, freno: false, izq: false, der: false, mano: false };
     this.dedos = new Map();
     this.visible = false;
     this.#construir();
@@ -154,6 +154,7 @@ export class ControlTactil {
       <button class="t-boton t-izq" data-b="izq" aria-label="Girar a la izquierda"><span>◀</span></button>
       <button class="t-boton t-der" data-b="der" aria-label="Girar a la derecha"><span>▶</span></button>
       <button class="t-boton t-freno" data-b="freno" aria-label="Frenar"><i></i><span>FRENO</span></button>
+      <button class="t-boton t-mano" data-b="mano" aria-label="Freno de mano"><b>P</b><span>F. MANO</span></button>
       <button class="t-boton t-gas" data-b="gas" aria-label="Acelerar"><i></i><span>GAS</span></button>`;
     const soltar = (e) => {
       const b = this.dedos.get(e.pointerId);
@@ -204,7 +205,7 @@ export class ControlTactil {
 
   /**
    * @param {number} dt segundos
-   * @returns {{throttle:number, brake:number, steer:number, analog:boolean, activo:boolean}}
+   * @returns {{throttle:number, brake:number, steer:number, handbrake:boolean, analog:boolean, activo:boolean}}
    */
   muestrear(dt) {
     const p = this.pulsado;
@@ -219,6 +220,7 @@ export class ControlTactil {
       throttle: p.gas ? 1 : 0,
       brake: p.freno ? 1 : 0,
       steer,
+      handbrake: p.mano,
       analog,
       activo: this.visible,
     };

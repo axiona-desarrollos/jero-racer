@@ -12,7 +12,7 @@ export default [
         __dirname:'readonly', URLSearchParams:'readonly', location:'readonly',
         setTimeout:'readonly', clearTimeout:'readonly', setInterval:'readonly',
         clearInterval:'readonly', KeyboardEvent:'readonly', Event:'readonly', localStorage:'readonly',
-        screen:'readonly', removeEventListener:'readonly', DeviceOrientationEvent:'readonly' },
+        screen:'readonly', removeEventListener:'readonly', DeviceOrientationEvent:'readonly', matchMedia:'readonly' },
     },
     rules: {
       'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],

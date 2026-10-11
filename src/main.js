@@ -61,6 +61,29 @@ const MOVIL = esMovil();
 // tactil tiene teclado, y los pedales le taparian media autopista.
 const TACTIL = MOVIL;
 const SPAWN = new THREE.Vector3(0, 0.06, GEO.islandR + 4.5);
+/** ¿Abierta como app instalada (icono en la pantalla de inicio)? */
+const INSTALADA = matchMedia('(display-mode: fullscreen)').matches
+  || matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+let avisoInstalar = null;
+
+// APP INSTALABLE. El service worker guarda el juego en el telefono: sin el,
+// la app instalada es un acceso directo que no abre si la red falla. Solo en
+// la version publicada; en desarrollo cachearia el codigo que se esta editando.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(e => console.warn('[sw]', e)));
+}
+// Android avisa cuando se puede instalar; se guarda para el boton del menu.
+addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  avisoInstalar = e;
+  const b = document.querySelector('#oInstalar');
+  if (b) b.hidden = false;
+});
+addEventListener('appinstalled', () => {
+  avisoInstalar = null;
+  const b = document.querySelector('#oInstalar');
+  if (b) b.hidden = true;
+});
 const $ = s => document.querySelector(s);
 
 const ui = new Interfaz();
@@ -223,7 +246,7 @@ async function main() {
     tactil = new ControlTactil($('#tactil'), { modo: prefs.direccion });
     input.tactil = tactil;
   }
-  escala = new EscalaDinamica(renderer, pixelRatio, (nueva) => { pixelRatio = nueva; resize(); });
+  escala = new EscalaDinamica(renderer, pixelRatio, (nueva) => { pixelRatio = nueva; resize(); }, CAL.pixelMin);
 
   resize();
   director = new DirectorCamara(camera, modosPorDefecto());
@@ -321,6 +344,13 @@ function conectarInterfaz() {
   };
   ui.on.direccion = () => cambiarDireccion(prefs.direccion === 'inclinar' ? 'botones' : 'inclinar');
   ui.on.compartir = () => compartir();
+  ui.on.instalar = () => {
+    if (!avisoInstalar) return;
+    avisoInstalar.prompt();
+    avisoInstalar.userChoice.finally(() => { avisoInstalar = null; $('#oInstalar').hidden = true; });
+  };
+  // En iPhone no hay aviso de instalacion: se explica como hacerlo a mano.
+  $('#mInstalarIOS').hidden = !(esIOS() && !INSTALADA);
 }
 
 function cambiarDireccion(modo) {
@@ -434,6 +464,9 @@ async function compartir() {
 /** Android: pantalla completa y horizontal. iOS no lo permite en Safari. */
 function pantallaCompleta() {
   if (!MOVIL || esIOS()) return;
+  // Instalada ya abre a pantalla completa: pedirla otra vez falla en algunos
+  // Android. Solo se fija la orientacion.
+  if (INSTALADA) { screen.orientation?.lock?.('landscape').catch(() => {}); return; }
   const el = document.documentElement;
   if (document.fullscreenElement || !el.requestFullscreen) return;
   el.requestFullscreen({ navigationUI: 'hide' })
@@ -510,6 +543,7 @@ function simular(dt) {
   const out = engine.update(th, vehicle.driveWheelRads, dt);
 
   vehicle.setControls(steer, out.torque, br, a.handbrake);
+  vehicle.estabilizar(dt, a.handbrake);
   vehicle.applyAero();
   vehicle.stepControls(dt);
   world.step();

@@ -151,6 +151,7 @@ export class Input {
       const t = this.tactil.muestrear(dt);
       teclado.throttle = Math.max(teclado.throttle, t.throttle);
       teclado.brake = Math.max(teclado.brake, t.brake);
+      teclado.handbrake = teclado.handbrake || !!t.handbrake;
       if (teclado.steer === 0) { teclado.steer = t.steer; teclado.analog = t.analog; }
     }
     return teclado;

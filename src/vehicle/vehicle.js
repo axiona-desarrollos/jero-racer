@@ -36,9 +36,22 @@ const FL = 0, FR = 1, RL = 2, RR = 3;
 const STEER_SIGN = -1;
 
 /** Reparto de frenada delantero/trasero de un GT. */
-const BRAKE_SPLIT_FRONT = 0.65;
-const MAX_BRAKE_TORQUE = 4500;
-const HANDBRAKE_TORQUE = 6000;
+const BRAKE_SPLIT_FRONT = 0.68;
+/**
+ * Desaceleracion con el pedal a fondo, en g. Un carro de calle con buenos
+ * neumaticos frena a ~1 g; mas que eso es de competicion.
+ */
+const DECEL_FRENO_G = 1.0;
+/**
+ * ABS: fraccion del limite de adherencia hasta la que se deja frenar cada
+ * rueda. Por debajo de 1 la rueda nunca llega a bloquearse.
+ */
+const ABS_MARGEN = 0.86;
+/**
+ * El freno de mano SI bloquea las traseras: es justo lo que hace derrapar.
+ * Unidades de Rapier (impulso por paso), muy por encima del limite.
+ */
+const HANDBRAKE_IMPULSO = 6000;
 
 export class Vehicle {
   constructor(RAPIER, world, gltfScene, opts = {}) {
@@ -352,20 +365,111 @@ export class Vehicle {
     const c = this.controller;
     this._lastSteer = steer;
 
-    const angle = STEER_SIGN * clamp(steer, -1, 1) * this.maxSteerAngle;
+    // DIRECCION SENSIBLE A LA VELOCIDAD. A 130 km/h el volante a tope ponia
+    // las ruedas a 18 grados: el neumatico ya no gira el coche, solo arrastra
+    // (perdia 80 km/h en segundo y medio) o lo hace trompear. El tope es el
+    // angulo que da la maxima aceleracion lateral que permite el agarre, mas
+    // unos grados de deriva del neumatico. En derrape (freno de mano) se deja
+    // mas margen para poder contravolantear.
+    const v = Math.abs(this.forwardSpeedKmh) / 3.6;
+    const batalla = this._batalla ?? (this._batalla = Math.abs(this.hubs[FL].pos.z - this.hubs[RL].pos.z) || 2.7);
+    const deriva = (handbrake || this._sinESC > 0) ? 0.30 : 0.065;
+    const tope = Math.min(this.maxSteerAngle,
+      Math.atan(batalla * 9.3 / Math.max(1, v * v)) + deriva);
+    this._delta = clamp(steer, -1, 1) * tope;     // + = derecha, ya con el tope
+    const angle = STEER_SIGN * this._delta;
     c.setWheelSteering(FL, angle);
     c.setWheelSteering(FR, angle);
 
     // El par va al eje trasero: es propulsion. Se reparte entre las dos ruedas.
-    const force = Number.isFinite(torque) ? (torque / this.wheelRadius) * 0.5 : 0;
+    // Frenando se corta: en Rapier una rueda con fuerza de motor IGNORA su
+    // freno, asi que pisar los dos pedales dejaba el eje trasero sin frenar.
+    const pedal = clamp(brake01, 0, 1);
+    // Con el freno de mano tambien: si no, acelerar y tirar del freno de mano
+    // a la vez (la tecnica del derrape) no bloqueaba las traseras.
+    const force = Number.isFinite(torque) && pedal < 0.05 && !handbrake ? (torque / this.wheelRadius) * 0.5 : 0;
     c.setWheelEngineForce(RL, force);
     c.setWheelEngineForce(RR, force);
 
-    const b = clamp(brake01, 0, 1) * MAX_BRAKE_TORQUE;
-    const bf = b * BRAKE_SPLIT_FRONT;
-    const br = b * (1 - BRAKE_SPLIT_FRONT) + (handbrake ? HANDBRAKE_TORQUE : 0);
-    c.setWheelBrake(FL, bf); c.setWheelBrake(FR, bf);
-    c.setWheelBrake(RL, br); c.setWheelBrake(RR, br);
+    // FRENO REALISTA CON ABS.
+    // El freno de Rapier es un IMPULSO maximo por paso, no un par. Antes valia
+    // 4500 con el pedal a fondo, cuando el limite de adherencia de una rueda
+    // ronda 140: cualquier toque de freno bloqueaba las cuatro ruedas, el eje
+    // trasero (que agarra menos) perdia el agarre lateral y el coche trompeaba.
+    // Ahora el pedal pide una desaceleracion real y cada rueda frena como mucho
+    // hasta su limite, descontando lo que ya gasta en sujetar la curva (el
+    // circulo de friccion). Asi frena recto y se puede girar mientras frena.
+    const dt = this._lastDt;
+    const total = pedal * this.mass * 9.81 * DECEL_FRENO_G * dt;
+    for (let i = 0; i < 4; i++) {
+      const trasera = i >= RL;
+      let b = total * (trasera ? 1 - BRAKE_SPLIT_FRONT : BRAKE_SPLIT_FRONT) * 0.5;
+      if (b > 0) {
+        const limite = c.wheelFrictionSlip(i) * Math.abs(c.wheelSuspensionForce(i)) * dt * ABS_MARGEN;
+        const lateral = Math.abs(c.wheelSideImpulse(i));
+        const libre = Math.sqrt(Math.max(0, limite * limite - lateral * lateral));
+        b = Math.min(b, Math.max(libre, limite * 0.3));
+        if (!Number.isFinite(b)) b = 0;
+      }
+      // Freno de mano: las traseras frenan algo POR ENCIMA de su limite, para
+      // que deslicen sin quedar bloqueadas del todo. Bloqueadas (el impulso
+      // enorme de antes) el coche daba media vuelta y caia de 95 a 30 km/h:
+      // un trompo, no un derrape.
+      if (trasera && handbrake) {
+        const limite = c.wheelFrictionSlip(i) * Math.abs(c.wheelSuspensionForce(i)) * dt;
+        b = Math.min(HANDBRAKE_IMPULSO, limite * 1.35);
+      }
+      c.setWheelBrake(i, b);
+      // Mientras se tira del freno de mano la trasera agarra menos de lado:
+      // es lo que deja colgar la cola y sostener el derrape con el volante.
+      if (trasera) c.setWheelSideFrictionStiffness(i, handbrake ? 0.5 : 0.72);
+    }
+  }
+
+  /**
+   * Control de estabilidad (ESC), como el de un carro moderno.
+   *
+   * El chasis esta afinado para derrapar (el tren trasero agarra menos), que
+   * en la glorieta era la gracia. En una autopista con trafico, y con el
+   * movil haciendo de volante, eso hacia que un volantazo o una frenada en
+   * curva acabaran en trompo. El ESC compara el giro del coche con el que
+   * pide el volante a esa velocidad y corrige el exceso. Se desconecta con el
+   * freno de mano y un rato despues: el derrape sigue siendo posible, pero
+   * solo cuando el jugador lo busca.
+   *
+   * Va ANTES de world.step().
+   * @param {number} dt
+   * @param {boolean} handbrake
+   */
+  estabilizar(dt, handbrake) {
+    this._sinESC = handbrake ? 1.5 : Math.max(0, (this._sinESC ?? 0) - dt);
+    if (this._sinESC > 0) {
+      // En derrape no hay ESC, pero si un tope: pasados ~45 grados de
+      // angulo el giro se frena. Sin el, cualquier derrape largo acababa en
+      // trompo y nadie lo sostiene con un movil en la mano.
+      const slip = Math.abs(this.yawSlipDeg);
+      if (slip > 42) {
+        const w = this.body.angvel();
+        const k = Math.min(1, (slip - 42) * 0.6 * dt);
+        this.body.setAngvel({ x: w.x, y: w.y * (1 - k), z: w.z }, true);
+      }
+      return;
+    }
+    const v = this.forwardSpeedKmh / 3.6;
+    if (v < 6) return;
+    // Volante + = derecha; girar a la derecha es yaw NEGATIVO (el coche mira a
+    // +Z y su izquierda es +X). Se usa el angulo de rueda real, ya con tope.
+    const delta = this._delta ?? 0;
+    let ref = -v * Math.tan(delta) / this._batalla;
+    const tope = 0.95 * 9.81 / v;                  // lo que permite la adherencia
+    ref = clamp(ref, -tope, tope);
+    const w = this.body.angvel();
+    const exceso = w.y - ref;
+    // Solo se corrige el exceso de giro (sobreviraje), no la falta.
+    if (Math.abs(w.y) > Math.abs(ref) + 0.04 || Math.sign(w.y) !== Math.sign(ref)) {
+      const k = Math.min(1, 7 * dt);
+      this.body.setAngvel({ x: w.x, y: w.y - exceso * k, z: w.z }, true);
+    }
   }
 
   /** Carga aerodinamica proporcional a v^2, aplicada por detras del centro. */

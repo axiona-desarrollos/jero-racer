@@ -5,7 +5,7 @@
   "type": "module",
   "description": "JERO RACER: juego de trafico en autopista infinita. Three.js + Rapier, modelos de trafico procedurales.",
   "author": "Axiona Desarrollos Inteligentes S.A.S.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -33,5 +33,10 @@
   },
   "overrides": {
     "rollup": "npm:@rollup/wasm-node@^4.63.2"
+  },
+  "homepage": "https://jeroracer.axionasoft.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/axiona-desarrollos/jero-racer.git"
   }
 }

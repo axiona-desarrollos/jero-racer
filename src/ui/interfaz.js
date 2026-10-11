@@ -42,6 +42,7 @@ export class Interfaz {
     enlazar('#oSonido', 'sonido');
     enlazar('#oDireccion', 'direccion');
     enlazar('#oCamara', 'camara');
+    enlazar('#oInstalar', 'instalar');
   }
 
   // ----------------------------------------------------------- arranque
@@ -60,8 +61,8 @@ export class Interfaz {
       : 'Rompe tu primer récord';
     this.n.mAyuda.innerHTML = movil
       ? (modoDireccion === 'inclinar'
-        ? '<b>Inclina el teléfono</b> como un timón para girar. <b>GAS</b> a la derecha, <b>FRENO</b> a la izquierda. Pasa rozando los carros para sumar <b>combos</b>.'
-        : '<b>◀ ▶</b> para girar, <b>GAS</b> y <b>FRENO</b> a la derecha. Pasa rozando los carros para sumar <b>combos</b>.')
+        ? '<b>Inclina el teléfono</b> como un timón para girar. <b>GAS</b> a la derecha, <b>FRENO</b> a la izquierda y <b>F. MANO</b> para derrapar. Pasa rozando los carros para sumar <b>combos</b>.'
+        : '<b>◀ ▶</b> para girar, <b>GAS</b> y <b>FRENO</b> a la derecha, <b>F. MANO</b> para derrapar. Pasa rozando los carros para sumar <b>combos</b>.')
       : '<b>W / ↑</b> acelerar · <b>S / ↓</b> frenar · <b>A D / ← →</b> girar · <b>ESPACIO</b> freno de mano · <b>C</b> cámara · <b>ESC</b> pausa · <b>M</b> sonido. Pasa rozando los carros para sumar <b>combos</b>. También con control de consola.';
     this.n.oDireccion.hidden = !movil;
     this.opciones({ modoDireccion, sonido, camara });
