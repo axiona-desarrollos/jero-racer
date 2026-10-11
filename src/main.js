@@ -269,6 +269,12 @@ async function main() {
 
 // ------------------------------------------------------------- interfaz
 function conectarInterfaz() {
+  // Safari de iPhone ignora user-scalable=no: un pellizco o doble toque en
+  // medio de la partida hacia zoom y descuadraba los pedales.
+  for (const ev of ['gesturestart', 'gesturechange', 'dblclick']) {
+    document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+  }
+
   // El navegador solo deja sonar audio tras un gesto. Cualquier toque o
   // tecla sirve; el boton JUGAR lo vuelve a intentar por si acaso.
   const arrancarAudio = () => { if (prefs.sonido) audio.start(); };
