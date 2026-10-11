@@ -34,6 +34,8 @@ export const DEFAULT_BINDINGS = Object.freeze({
   pause: ['Escape', 'KeyP'],
   mute: ['KeyM'],
   hud: ['KeyH'],
+  telemetria: ['KeyT'],
+  aceptar: ['Enter', 'NumpadEnter'],
 });
 
 export class Input {
@@ -43,6 +45,10 @@ export class Input {
     this.pressed = Object.create(null);   // flanco de subida, se consume
     this.gamepadIndex = null;
     this._target = target;
+    /** Controles en pantalla (movil). Los pone main.js si hay pantalla tactil. */
+    this.tactil = null;
+    /** Mientras sea false no se acelera ni se gira: cuenta atras, menus. */
+    this.conduccion = true;
 
     this._onDown = e => {
       // No robamos las teclas del navegador si el usuario esta en un input.
@@ -103,7 +109,15 @@ export class Input {
    * @returns {{throttle:number, brake:number, steer:number, handbrake:boolean, analog:boolean}}
    *          steer: -1 izquierda … +1 derecha
    */
-  sample() {
+  sample(dt = 1 / 60) {
+    const e = this.#leer(dt);
+    // Freno de mano y no el pedal: con el pedal a mas de 0,5 y el coche parado
+    // la caja engrana la marcha atras.
+    if (!this.conduccion) { e.throttle = 0; e.steer = 0; e.brake = 0; e.handbrake = true; }
+    return e;
+  }
+
+  #leer(dt) {
     const pad = this.#pad();
 
     // Mando: gatillos analogicos y stick izquierdo. Mapeo XInput estandar.
@@ -124,13 +138,28 @@ export class Input {
       }
     }
 
-    return {
+    const teclado = {
       throttle: this.#down('throttle') ? 1 : 0,
       brake: this.#down('brake') ? 1 : 0,
       steer: (this.#down('right') ? 1 : 0) - (this.#down('left') ? 1 : 0),
       handbrake: this.#down('handbrake'),
       analog: false,
     };
+    // Los controles en pantalla se SUMAN al teclado en vez de sustituirlo: en
+    // una tableta con teclado se puede usar cualquiera de los dos.
+    if (this.tactil && this.tactil.visible) {
+      const t = this.tactil.muestrear(dt);
+      teclado.throttle = Math.max(teclado.throttle, t.throttle);
+      teclado.brake = Math.max(teclado.brake, t.brake);
+      if (teclado.steer === 0) { teclado.steer = t.steer; teclado.analog = t.analog; }
+    }
+    return teclado;
+  }
+
+  /** Pulsacion simulada desde un boton en pantalla (pausa, camara...). */
+  pulsar(accion) {
+    const c = this.bindings[accion]?.[0];
+    if (c) this.pressed[c] = true;
   }
 
   dispose() {

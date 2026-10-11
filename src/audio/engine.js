@@ -286,6 +286,114 @@ export class EngineAudio {
     s.start(now); s.stop(now + dur + 0.05);
   }
 
+  /**
+   * Paso de un vehiculo junto al coche: un soplo de aire que barre de un
+   * oido al otro. Es la mitad de la sensacion de velocidad en un juego de
+   * trafico; sin el, adelantar a 200 km/h suena igual que ir solo.
+   * @param {number} lado +1 el vehiculo queda a la izquierda, -1 a la derecha
+   * @param {number} fuerza 0..1 (mas cerca y mas rapido, mas fuerte)
+   * @param {boolean} pesado los camiones mueven mas aire y suenan mas grave
+   */
+  paso(lado, fuerza, pesado = false) {
+    if (!this.ready || !this.enabled) return;
+    const ctx = this.ctx, now = ctx.currentTime;
+    const f = clamp(fuerza, 0, 1);
+    const s = ctx.createBufferSource(); s.buffer = this.noiseBuf;
+    s.playbackRate.value = 0.9 + Math.random() * 0.3;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.Q.value = 0.9;
+    const f0 = pesado ? 260 : 520, f1 = pesado ? 900 : 1900;
+    bp.frequency.setValueAtTime(f0, now);
+    bp.frequency.exponentialRampToValueAtTime(f1, now + 0.12);
+    bp.frequency.exponentialRampToValueAtTime(f0 * 0.7, now + 0.42);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.02 + 0.16 * f * (pesado ? 1.3 : 1), now + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.46);
+    let salida = g;
+    if (ctx.createStereoPanner) {
+      const p = ctx.createStereoPanner();
+      p.pan.setValueAtTime(-lado * 0.75, now);
+      p.pan.linearRampToValueAtTime(-lado * 0.15, now + 0.4);
+      g.connect(p); salida = p;
+    }
+    s.connect(bp); bp.connect(g); salida.connect(this.bus);
+    s.start(now); s.stop(now + 0.5);
+  }
+
+  /** Campanazo corto del bono de rozon: sube de tono con el combo. */
+  bono(combo = 1) {
+    if (!this.ready || !this.enabled) return;
+    const ctx = this.ctx, now = ctx.currentTime;
+    const base = 660 * Math.pow(1.12246, Math.min(combo, 6) - 1);
+    for (const [mult, retardo] of [[1, 0], [1.5, 0.06]]) {
+      const o = ctx.createOscillator(); o.type = 'triangle';
+      o.frequency.value = base * mult;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now + retardo);
+      g.gain.exponentialRampToValueAtTime(0.07, now + retardo + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + retardo + 0.22);
+      o.connect(g); g.connect(this.bus);
+      o.start(now + retardo); o.stop(now + retardo + 0.25);
+    }
+  }
+
+  /** Pitido de la cuenta atras. El ultimo, mas agudo y largo. */
+  pitido(final = false) {
+    if (!this.ready || !this.enabled) return;
+    const ctx = this.ctx, now = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'square';
+    o.frequency.value = final ? 1320 : 660;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600;
+    const g = ctx.createGain();
+    const d = final ? 0.42 : 0.16;
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.06, now + 0.01);
+    g.gain.setValueAtTime(0.06, now + d * 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + d);
+    o.connect(lp); lp.connect(g); g.connect(this.bus);
+    o.start(now); o.stop(now + d + 0.05);
+  }
+
+  /**
+   * Choque: golpe grave, crujido de chapa y cristales. El motor se ahoga.
+   * @param {number} fuerza 0..1
+   */
+  choque(fuerza = 1) {
+    if (!this.ready) return;
+    const ctx = this.ctx, now = ctx.currentTime;
+    const f = clamp(fuerza, 0.25, 1);
+    // Golpe sordo: seno que cae de tono.
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(110, now);
+    o.frequency.exponentialRampToValueAtTime(38, now + 0.35);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.55 * f, now + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+    o.connect(g); g.connect(this.bus);
+    o.start(now); o.stop(now + 0.65);
+    // Chapa: ruido grave y largo; cristal: ruido agudo y corto.
+    this.#burst(420, 0.45 * f, 0.55, 0.8);
+    this.#burst(1400, 0.22 * f, 0.30, 1.2);
+    this.#burst(5200, 0.10 * f, 0.18, 3.0);
+    // El motor se cala.
+    this.engineOut.gain.cancelScheduledValues(now);
+    this.engineOut.gain.setTargetAtTime(0.18, now, 0.08);
+  }
+
+  /** Devuelve el motor a su volumen tras reiniciar. */
+  reanudarMotor() {
+    if (!this.ready) return;
+    const now = this.ctx.currentTime;
+    this.engineOut.gain.cancelScheduledValues(now);
+    this.engineOut.gain.setTargetAtTime(0.85, now, 0.15);
+  }
+
+  /** Pausa real del audio (pestana oculta, menu de pausa). */
+  suspender() { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); }
+  reanudar() { if (this.ctx && this.ctx.state === 'suspended' && this.enabled) this.ctx.resume(); }
+
   setEnabled(on) {
     this.enabled = on;
     if (this.ready) this.master.gain.setTargetAtTime(on ? 0.9 : 0, this.ctx.currentTime, 0.08);

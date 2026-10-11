@@ -56,7 +56,18 @@ export class DirectorCamara {
     this._arribaDestino = new THREE.Vector3(0, 1, 0);
     this._fov = camara.fov;
     this._iniciado = false;
+    this._anclaPrev = new THREE.Vector3();
+    this._hayAncla = false;
+    this._delta = new THREE.Vector3();
+    this.sacudida = 0;
+    this._ruido = new THREE.Vector3();
   }
+
+  /**
+   * Sacude la camara (choques). Decae sola.
+   * @param {number} fuerza metros de amplitud inicial
+   */
+  sacudir(fuerza) { this.sacudida = Math.max(this.sacudida, fuerza); }
 
   /** @returns {{nombre:string, etiqueta:string, calcular:Function, reiniciar?:Function}} */
   get modo() { return this.modos[this.indice]; }
@@ -97,6 +108,9 @@ export class DirectorCamara {
     this._fov = p.fov;
     this.cruce = 0;
     this._iniciado = true;
+    this._hayAncla = !!p.ancla;
+    if (p.ancla) this._anclaPrev.copy(p.ancla);
+    this.sacudida = 0;
     this.#aplicar();
   }
 
@@ -110,6 +124,24 @@ export class DirectorCamara {
 
     const p = this.modo.calcular(ctx);
     if (!this._iniciado) { this.fijar(ctx); return; }
+
+    // LA CAMARA VIAJA CON EL COCHE. Los modos que declaran un ancla (el
+    // coche) arrastran la camara con la traslacion del coche ANTES de
+    // suavizar. Asi el suavizado solo actua sobre el giro y el cambio de
+    // encuadre, no sobre el avance: antes, a 200 km/h, la persecucion se
+    // quedaba 6 m por detras de su sitio y el coche salia diminuto.
+    if (p.ancla) {
+      if (this._hayAncla) {
+        this._delta.copy(p.ancla).sub(this._anclaPrev);
+        // Un salto de mas de 30 m en un fotograma es una reaparicion, no
+        // movimiento: no se arrastra.
+        if (this._delta.lengthSq() < 900) { this._pos.add(this._delta); this._mira.add(this._delta); }
+      }
+      this._anclaPrev.copy(p.ancla);
+      this._hayAncla = true;
+    } else {
+      this._hayAncla = false;
+    }
 
     let fPos, fMira;
     if (this.cruce > 0) {
@@ -159,6 +191,12 @@ export class DirectorCamara {
     }
 
     c.position.copy(this._pos);
+    if (this.sacudida > 0.001) {
+      const a = this.sacudida;
+      this._ruido.set((Math.random() - 0.5) * a, (Math.random() - 0.5) * a * 0.7, (Math.random() - 0.5) * a);
+      c.position.add(this._ruido);
+      this.sacudida *= 0.9;
+    }
     c.lookAt(this._mira);
     if (Math.abs(c.fov - this._fov) > 0.01) {
       c.fov = this._fov;

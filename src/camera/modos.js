@@ -64,6 +64,8 @@ function poseReutilizable() {
 export function modoPersecucion() {
   const pose = poseReutilizable();
   const off = new THREE.Vector3();
+  const frente = new THREE.Vector3();
+  pose.ancla = new THREE.Vector3();
   return {
     nombre: 'persecucion',
     etiqueta: 'PERSECUCIÓN',
@@ -71,12 +73,17 @@ export function modoPersecucion() {
     calcular(ctx) {
       const t = tVel(ctx);
       const b = ctx.cuerpo;
-      off.set(0, 2.55, -lerp(6.2, 7.8, t)).applyQuaternion(b.quaternion);
+      off.set(0, lerp(2.35, 2.15, t), -lerp(5.9, 6.6, t)).applyQuaternion(b.quaternion);
       pose.pos.copy(b.position).add(off);
-      pose.mira.copy(b.position); pose.mira.y += 0.9;
-      pose.fov = lerp(58, 70, t);
-      pose.kPos = 0.0016;
-      pose.kMira = 0.0006;
+      // Mira por DELANTE del coche: en un juego de trafico lo que importa es
+      // la via que viene, no el techo del propio coche.
+      frente.set(0, 0, lerp(4.5, 9, t)).applyQuaternion(b.quaternion);
+      frente.y = 0;
+      pose.mira.copy(b.position).add(frente); pose.mira.y = b.position.y + 0.95;
+      pose.fov = lerp(60, 76, t);
+      pose.kPos = 0.004;
+      pose.kMira = 0.002;
+      pose.ancla.copy(b.position);
       return pose;
     },
   };
@@ -87,6 +94,7 @@ export function modoCabina() {
   const pose = poseReutilizable();
   const off = new THREE.Vector3();
   const frente = new THREE.Vector3();
+  pose.ancla = new THREE.Vector3();
   return {
     nombre: 'cabina',
     etiqueta: 'CABINA',
@@ -98,6 +106,7 @@ export function modoCabina() {
       frente.set(0, 0.95, 8).applyQuaternion(b.quaternion);
       pose.mira.copy(b.position).add(frente);
       pose.fov = 72;
+      pose.ancla.copy(b.position);
       pose.kPos = PEGADO;
       pose.kMira = PEGADO;
       return pose;
@@ -113,6 +122,7 @@ export function modoCapo() {
   const pose = poseReutilizable();
   const off = new THREE.Vector3();
   const frente = new THREE.Vector3();
+  pose.ancla = new THREE.Vector3();
   return {
     nombre: 'capo',
     etiqueta: 'CAPÓ',
@@ -126,6 +136,7 @@ export function modoCapo() {
       pose.fov = lerp(64, 74, tVel(ctx));
       pose.kPos = PEGADO;
       pose.kMira = 0.0008;
+      pose.ancla.copy(b.position);
       return pose;
     },
   };

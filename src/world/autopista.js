@@ -21,6 +21,7 @@
    ========================================================================== */
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /** Geometria de la calzada. Todo lo demas se deriva de aqui. */
 export const VIA = Object.freeze({
@@ -34,11 +35,13 @@ export const VIA = Object.freeze({
 });
 
 export const anchoCalzada = () => VIA.carriles * VIA.anchoCarril;
+const APARCAR = 100000;
 export const anchoTotal = () => anchoCalzada() + VIA.anchoArcen * 2;
 
 /**
- * Centro del carril `i` en X. El carril 0 es el de mas a la izquierda mirando
- * hacia +Z, que es la direccion de marcha.
+ * Centro del carril `i` en X. El carril 0 es el de mas a la DERECHA del
+ * conductor: mirando hacia +Z (la direccion de marcha) la izquierda es +X, y
+ * el carril 0 esta en la X mas negativa. El carril rapido es el de indice alto.
  */
 export function carrilX(i) {
   const w = anchoCalzada();
@@ -84,11 +87,14 @@ function ruidoValor(x, y, escala) {
   return (a * (1 - sx) + b * sx) * (1 - sy) + (c2 * (1 - sx) + d2 * sx) * sy;
 }
 
-function texturaFirme() {
+function texturaFirme(W = 2048) {
   // 2048x1024 sobre 27,2 x 12 m son ~13 mm por texel a lo ancho y ~12 a lo
   // largo. Con los 1024x256 de antes eran 27 y 47 mm: de dos a cinco
   // centimetros por texel en la superficie que el jugador mira todo el rato.
-  const W = 2048, H = 1024;
+  // En movil se genera a la mitad: el bucle de ruido por pixel tardaba casi
+  // un segundo en un Android de gama media.
+  const H = W / 2;
+  const k = W / 2048;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const g = c.getContext('2d');
@@ -106,8 +112,8 @@ function texturaFirme() {
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
-      const grueso = (ruidoValor(x, y, 46) - 0.5) * 15;
-      const fino = (ruidoValor(x, y, 2.6) - 0.5) * 26;
+      const grueso = (ruidoValor(x, y, 46 * k) - 0.5) * 15;
+      const fino = (ruidoValor(x, y, Math.max(1.3, 2.6 * k)) - 0.5) * 26;
       const n = grueso + fino;
       d[i] = Math.max(0, Math.min(255, d[i] + n));
       d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + n));
@@ -156,6 +162,66 @@ function texturaFirme() {
   return t;
 }
 
+/** Pinta toda una geometria de un color (para fundir piezas en una malla). */
+function pintada(geo, hex) {
+  const g = geo.index ? geo.toNonIndexed() : geo;
+  const c = new THREE.Color(hex);
+  const n = g.getAttribute('position').count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  if (g.getAttribute('uv')) g.deleteAttribute('uv');
+  return g;
+}
+
+/**
+ * Todo lo que acompana a un tramo de via, fundido en UNA geometria: defensa
+ * metalica con postes a la derecha, barrera New Jersey de concreto en el
+ * separador de la izquierda y postes de alumbrado. Una llamada de dibujo por
+ * tramo en vez de cientos de piezas sueltas.
+ */
+function geometriaVestido(L) {
+  const partes = [];
+  const borde = anchoTotal() / 2;
+
+  // Barrera New Jersey (izquierda, +X): perfil de concreto extruido.
+  const nj = new THREE.Shape();
+  const p = [[0.30, 0], [0.28, 0.08], [0.16, 0.33], [0.10, 0.82], [-0.10, 0.82], [-0.16, 0.33], [-0.28, 0.08], [-0.30, 0]];
+  nj.moveTo(p[0][0], p[0][1]);
+  for (const [x, y] of p.slice(1)) nj.lineTo(x, y);
+  const geoNJ = new THREE.ExtrudeGeometry(nj, { depth: L, bevelEnabled: false });
+  geoNJ.translate(borde + 0.4, 0, -L / 2);
+  partes.push(pintada(geoNJ, 0xb3b0a7));
+
+  // Defensa metalica (derecha, −X): banda de doble onda sobre postes.
+  const xDef = -(borde + 0.35);
+  for (const [y, dx, h] of [[0.62, 0, 0.13], [0.78, 0, 0.13], [0.70, 0.03, 0.05]]) {
+    const b = new THREE.BoxGeometry(0.05, h, L);
+    b.translate(xDef + dx, y, 0);
+    partes.push(pintada(b, 0xaab1b8));
+  }
+  for (let z = -L / 2 + 1; z < L / 2; z += 2) {
+    const poste = new THREE.BoxGeometry(0.09, 0.78, 0.14);
+    poste.translate(xDef - 0.12, 0.39, z);
+    partes.push(pintada(poste, 0x7f868d));
+  }
+
+  // Alumbrado en el separador cada 50 m: poste, brazo y luminaria.
+  for (let z = -L / 2 + 25; z < L / 2; z += 50) {
+    const xp = borde + 1.8;
+    const poste = new THREE.CylinderGeometry(0.08, 0.13, 10, 8);
+    poste.translate(xp, 5, z);
+    partes.push(pintada(poste, 0x8b929a));
+    const brazo = new THREE.BoxGeometry(2.6, 0.08, 0.08);
+    brazo.translate(xp - 1.25, 9.85, z);
+    partes.push(pintada(brazo, 0x8b929a));
+    const lum = new THREE.BoxGeometry(0.7, 0.14, 0.28);
+    lum.translate(xp - 2.55, 9.78, z);
+    partes.push(pintada(lum, 0x5c6168));
+  }
+  return mergeGeometries(partes);
+}
+
 export class Autopista {
   /**
    * @param {THREE.Scene} scene
@@ -163,7 +229,7 @@ export class Autopista {
    * @param {object} world
    * @param {THREE.WebGLRenderer} [renderer] para ajustar la anisotropia real
    */
-  constructor(scene, RAPIER, world, renderer = null) {
+  constructor(scene, RAPIER, world, renderer = null, { firme = 2048 } = {}) {
     this.scene = scene;
     this.grupo = new THREE.Group();
     this.grupo.name = 'autopista';
@@ -188,7 +254,7 @@ export class Autopista {
     }
 
     // --- dibujo: cinta reciclable -------------------------------------------
-    const tex = texturaFirme();
+    const tex = texturaFirme(firme);
     tex.anisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 16;
     tex.repeat.set(1, L / TRAMO);
     const matFirme = new THREE.MeshStandardMaterial({
@@ -197,8 +263,8 @@ export class Autopista {
     const geoFirme = new THREE.PlaneGeometry(total, L);
     geoFirme.rotateX(-Math.PI / 2);
 
-    const matMuro = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.7, metalness: 0.15 });
-    const geoMuro = new THREE.BoxGeometry(0.8, VIA.alturaQuitamiedos * 2, L);
+    const matVestido = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0.25 });
+    const geoVestido = geometriaVestido(L);
 
     this.segmentos = [];
     for (let i = 0; i < VIA.segmentos; i++) {
@@ -206,12 +272,9 @@ export class Autopista {
       const firme = new THREE.Mesh(geoFirme, matFirme);
       firme.receiveShadow = true;
       s.add(firme);
-      for (const lado of [-1, 1]) {
-        const m = new THREE.Mesh(geoMuro, matMuro);
-        m.position.set(lado * xMuro, VIA.alturaQuitamiedos, 0);
-        m.castShadow = true; m.receiveShadow = true;
-        s.add(m);
-      }
+      const vestido = new THREE.Mesh(geoVestido, matVestido);
+      vestido.castShadow = true; vestido.receiveShadow = true;
+      s.add(vestido);
       s.position.z = i * L;
       this.grupo.add(s);
       this.segmentos.push(s);
@@ -219,8 +282,8 @@ export class Autopista {
 
     // Postes de referencia: el ojo necesita algo cercano que pase rapido para
     // leer velocidad. El asfalto solo no basta.
-    const geoPoste = new THREE.BoxGeometry(0.16, 1.15, 0.16);
-    const matPoste = new THREE.MeshStandardMaterial({ color: 0xd8dde3, roughness: 0.8 });
+    const geoPoste = new THREE.BoxGeometry(0.12, 1.0, 0.12);
+    const matPoste = new THREE.MeshStandardMaterial({ color: 0xe8ebee, roughness: 0.6 });
     const separacion = 25;
     this.postesPorLado = Math.ceil((VIA.segmentos * L) / separacion);
     this.postes = new THREE.InstancedMesh(geoPoste, matPoste, this.postesPorLado * 2);
@@ -258,8 +321,10 @@ export class Autopista {
     let n = 0;
     for (let i = 0; i < this.postesPorLado; i++) {
       const zp = Math.ceil(zIni / sep) * sep + i * sep;
+      // Se dejan en la derecha, tras la defensa: el separador ya tiene la
+      // barrera y los postes de luz como referencia.
       for (const lado of [-1, 1]) {
-        this._pos.set(lado * (xMuro + 0.9), 0.58, zp);
+        if (lado > 0) { this._pos.set(APARCAR, -50, 0); } else { this._pos.set(lado * (xMuro + 0.9), 0.5, zp); }
         this._mat4.compose(this._pos, this._q, this._esc);
         this.postes.setMatrixAt(n++, this._mat4);
       }

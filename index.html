@@ -2,92 +2,273 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HIGHWAY RACER · Glorieta</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>JERO RACER · Autopista infinita</title>
+<meta name="description" content="Juego de carreras en 3D gratis: maneja a toda velocidad por una autopista antioqueña, esquiva carros, buses y tractomulas y rompe tu récord. Funciona en el navegador del PC, iPhone y Android.">
+<meta name="theme-color" content="#0a0e14">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jero Racer">
+<meta property="og:type" content="website">
+<meta property="og:title" content="JERO RACER · Autopista infinita">
+<meta property="og:description" content="Esquiva el tráfico a 250 km/h. Gratis, en el navegador, en PC y celular.">
+<meta property="og:image" content="https://jeroracer.axionasoft.com/compartir.jpg">
+<meta property="og:url" content="https://jeroracer.axionasoft.com/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icono-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icono-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Russo+One&display=swap" rel="stylesheet">
 <style>
-  :root{ --neon:#00f0c0; --cyan:#4dd8e6; --ink:#e8eef8; --dim:#7d8aa5; --bg:#0a0e14; }
-  *{box-sizing:border-box}
-
-  /* El atributo `hidden` se implementa con `[hidden]{display:none}` en la hoja
-     del NAVEGADOR, y cualquier regla de autor que fije `display` la vence — el
-     estilo de autor siempre gana al del user-agent. `.cartel{display:flex}`
-     dejaba el cartel de choque visible SIEMPRE: una capa a pantalla completa
-     con fondo oscuro y `backdrop-filter: blur(3px)` sobre todo el juego. De ahi
-     venia que se viera oscuro y borroso, HUD incluido, mientras el navegador se
-     veia nitido. Esta linea hace que `hidden` signifique lo que dice. */
+  :root{
+    --neon:#00f0c0; --neon2:#4dd8e6; --ink:#e8eef8; --dim:#8b97ae; --bg:#0a0e14;
+    --panel:rgba(10,16,26,.78); --borde:rgba(0,240,192,.30); --rojo:#ff4d5e; --ambar:#ffb648;
+    --titulo:'Russo One','Rajdhani',system-ui,sans-serif;
+    --texto:'Rajdhani',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --sa-t:env(safe-area-inset-top,0px); --sa-r:env(safe-area-inset-right,0px);
+    --sa-b:env(safe-area-inset-bottom,0px); --sa-l:env(safe-area-inset-left,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* El atributo hidden lo implementa la hoja del navegador con display:none,
+     y cualquier regla de autor que fije display la vence. Esta linea hace que
+     hidden signifique lo que dice (el cartel de choque quedaba siempre puesto). */
   [hidden]{display:none!important}
-  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;
-    font-family:Consolas,'IBM Plex Mono',ui-monospace,monospace;color:var(--ink)}
-  #c{display:block;width:100%;height:100%}
+  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;color:var(--ink);
+    font-family:var(--texto);touch-action:none;user-select:none;-webkit-user-select:none;
+    overscroll-behavior:none;-webkit-touch-callout:none}
+  #c{display:block;position:fixed;inset:0;width:100%;height:100%}
+  button{font-family:inherit;color:inherit;cursor:pointer;border:0;background:none}
 
-  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-    font-size:15px;color:var(--cyan);letter-spacing:1px;background:var(--bg);z-index:20}
+  #boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:18px;background:radial-gradient(ellipse at 50% 40%,#10202a 0%,var(--bg) 70%);z-index:40}
+  #boot .logo{font-family:var(--titulo);font-size:clamp(34px,8vw,64px);letter-spacing:2px;color:var(--ink)}
+  #boot .logo b{color:var(--neon);text-shadow:0 0 24px rgba(0,240,192,.55)}
+  #boot .barra{width:min(320px,70vw);height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
+  #boot .barra i{display:block;height:100%;width:8%;background:var(--neon);border-radius:6px;transition:width .3s}
+  #boot .msg{font-size:15px;color:var(--dim);letter-spacing:1px;min-height:1.2em;text-align:center;padding:0 20px}
 
-  .hud{position:fixed;left:20px;top:20px;min-width:300px;
+  /* ---------------- telemetria (oculta salvo T o ?telemetria) */
+  .hud{position:fixed;left:calc(16px + var(--sa-l));top:calc(76px + var(--sa-t));min-width:280px;
     background:rgba(12,19,32,.80);border:1px solid rgba(0,240,192,.28);
-    border-radius:12px;padding:14px 18px;font-size:12.5px;line-height:1.75;
-    backdrop-filter:blur(6px)}
-  .hud .big{font-size:42px;font-weight:700;color:var(--neon);line-height:1.05;
-    margin-bottom:8px;letter-spacing:-1px}
-  .hud .big i{font-size:13px;font-style:normal;color:var(--dim);margin-left:5px;letter-spacing:0}
-  .hud .big .g{float:right;font-size:26px;color:var(--ink);
-    border:1px solid rgba(120,175,215,.3);border-radius:7px;padding:0 11px;margin-top:6px;
-    min-width:52px;text-align:center}
+    border-radius:12px;padding:12px 16px;font:12.5px/1.75 Consolas,ui-monospace,monospace;z-index:6}
+  .hud .big{font-size:36px;font-weight:700;color:var(--neon);line-height:1.05;margin-bottom:8px}
+  .hud .big i{font-size:13px;font-style:normal;color:var(--dim);margin-left:5px}
+  .hud .big .g{float:right;font-size:22px;color:var(--ink);border:1px solid rgba(120,175,215,.3);
+    border-radius:7px;padding:0 10px;margin-top:6px}
   .hud .r{display:flex;justify-content:space-between;gap:16px}
-  .hud .r span{color:var(--dim)}
-  .hud .r b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
-  .hud .r .m{color:var(--cyan);letter-spacing:-1px}
-  .hud .hl b{color:var(--neon)}
+  .hud .r span{color:var(--dim)} .hud .r b{color:var(--ink);font-weight:600}
+  .hud .r .m{color:var(--neon2);letter-spacing:-1px} .hud .hl b{color:var(--neon)}
   .hud .dim{opacity:.55;margin-top:6px;border-top:1px solid rgba(120,175,215,.14);padding-top:6px}
-  .hud .aviso{color:#ffb648;font-weight:700;letter-spacing:1px;min-height:1.2em;margin-top:4px}
-  .hud .camara{color:var(--neon);font-weight:700;letter-spacing:3px;min-height:1.2em;
-    font-size:11.5px;opacity:.9}
+  .hud .aviso{color:var(--ambar);font-weight:700;min-height:1.2em}
+  .hud .camara{color:var(--neon);font-weight:700;letter-spacing:3px;min-height:1.2em}
 
-  #help{position:fixed;left:20px;bottom:18px;font-size:12px;color:var(--dim);
-    line-height:1.9;background:rgba(12,19,32,.66);border-radius:10px;padding:10px 14px}
-  #help b{color:var(--cyan);font-weight:600}
-  .marcador{position:fixed;left:50%;top:18px;transform:translateX(-50%);text-align:center;
-    background:rgba(12,19,32,.78);border:1px solid rgba(0,240,192,.26);border-radius:12px;
-    padding:8px 26px 10px;backdrop-filter:blur(6px);min-width:210px}
-  .marcador .dist{font-size:40px;font-weight:700;color:var(--neon);line-height:1;letter-spacing:-1px}
-  .marcador .dist i{font-size:13px;font-style:normal;color:var(--dim);margin-left:6px;letter-spacing:0}
-  .marcador .rec{font-size:11px;color:var(--dim);letter-spacing:2px;margin-top:5px}
-  .marcador .rec b{color:var(--cyan);margin-left:8px;font-variant-numeric:tabular-nums}
-  .marcador .nuevo{font-size:11px;color:#ffb648;letter-spacing:2px;font-weight:700;min-height:1.1em}
+  /* ---------------- HUD de juego */
+  #juego{position:fixed;inset:0;pointer-events:none;z-index:8}
+  #juego .barraSup{position:absolute;left:0;right:0;top:0;display:flex;align-items:flex-start;justify-content:space-between;
+    padding:calc(12px + var(--sa-t)) calc(14px + var(--sa-r)) 0 calc(14px + var(--sa-l));gap:10px}
+  .botonesSup{display:flex;gap:8px;pointer-events:auto}
+  .bIcono{width:46px;height:46px;border-radius:14px;background:var(--panel);border:1px solid var(--borde);
+    display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+  .bIcono svg{width:22px;height:22px;fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+  .bIcono:active{transform:scale(.94);background:rgba(0,240,192,.18)}
+  .marca{text-align:center;background:var(--panel);border:1px solid var(--borde);border-radius:16px;
+    padding:6px 22px 8px;backdrop-filter:blur(6px);min-width:170px}
+  .marca .pts{font-family:var(--titulo);font-size:clamp(26px,5vw,38px);color:var(--neon);line-height:1.05;
+    font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(0,240,192,.35)}
+  .marca .sub{font-size:13px;color:var(--dim);letter-spacing:1.5px;font-weight:600}
+  .marca .sub b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .veloc{text-align:right;background:var(--panel);border:1px solid var(--borde);border-radius:16px;
+    padding:6px 14px 8px;backdrop-filter:blur(6px);min-width:120px}
+  .veloc .kmh{font-family:var(--titulo);font-size:clamp(28px,5.4vw,42px);line-height:1;font-variant-numeric:tabular-nums}
+  .veloc .kmh i{font-family:var(--texto);font-style:normal;font-size:13px;color:var(--dim);margin-left:4px;letter-spacing:1px}
+  .veloc .fila{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:4px}
+  .veloc .marcha{font-family:var(--titulo);font-size:15px;color:var(--ink);border:1px solid rgba(120,175,215,.35);
+    border-radius:8px;padding:0 8px;min-width:30px;text-align:center}
+  .veloc .rpm{flex:1;height:5px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden}
+  .veloc .rpm i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--neon),var(--ambar) 80%,var(--rojo));border-radius:5px}
+  .combo{position:absolute;left:50%;top:calc(92px + var(--sa-t));transform:translateX(-50%);
+    font-family:var(--titulo);font-size:15px;letter-spacing:2px;color:var(--ambar);opacity:0;transition:opacity .25s}
+  .combo.on{opacity:1}
+  .combo .t{display:block;height:3px;margin-top:4px;border-radius:3px;background:var(--ambar);transform-origin:left}
 
-  .cartel{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
-    justify-content:center;gap:10px;background:rgba(6,9,14,.72);z-index:15;
-    backdrop-filter:blur(3px)}
-  .cartel .titulo{font-size:58px;font-weight:700;color:#ff5d5d;letter-spacing:6px}
-  .cartel .detalle{font-size:15px;color:var(--ink)}
-  .cartel .pie{font-size:12px;color:var(--dim);letter-spacing:2px;margin-top:6px}
+  #avisos{position:absolute;left:0;right:0;top:34%;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .aviso{font-family:var(--titulo);font-size:clamp(22px,4.6vw,38px);letter-spacing:2px;color:#fff;
+    text-shadow:0 2px 0 rgba(0,0,0,.35),0 0 26px rgba(0,240,192,.6);animation:salta 1.15s ease-out forwards}
+  .aviso small{display:block;text-align:center;font-family:var(--texto);font-weight:700;font-size:.55em;color:var(--neon);letter-spacing:3px}
+  .aviso.rojo{text-shadow:0 0 26px rgba(255,77,94,.7)} .aviso.ambar small{color:var(--ambar)}
+  @keyframes salta{0%{transform:scale(.4);opacity:0}14%{transform:scale(1.12);opacity:1}26%{transform:scale(1)}
+    75%{opacity:1;transform:translateY(-6px)}100%{opacity:0;transform:translateY(-34px)}}
+  #cuenta{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:12;pointer-events:none}
+  #cuenta span{font-family:var(--titulo);font-size:clamp(90px,22vw,190px);color:#fff;
+    text-shadow:0 0 40px rgba(0,240,192,.8);animation:cuenta .9s ease-out forwards}
+  #cuenta span.ya{color:var(--neon)}
+  @keyframes cuenta{0%{transform:scale(2.2);opacity:0}25%{transform:scale(1);opacity:1}80%{opacity:1}100%{transform:scale(.8);opacity:0}}
 
-  #brand{position:fixed;right:20px;top:20px;font-size:11px;color:var(--dim);
-    letter-spacing:3px;text-align:right}
-  #brand b{color:var(--neon);letter-spacing:4px;display:block;font-size:15px}
+  /* ---------------- pantallas */
+  /* margin:auto en el hijo y no align-items:center: si el contenido no cabe
+     (movil en horizontal), centrar lo cortaria por arriba sin poder llegar. */
+  .pantalla{position:fixed;inset:0;z-index:20;display:flex;overflow-y:auto;touch-action:pan-y;
+    padding:calc(16px + var(--sa-t)) calc(16px + var(--sa-r)) calc(16px + var(--sa-b)) calc(16px + var(--sa-l))}
+  .pantalla > *{margin:auto}
+  #menu > .tarjeta{margin-left:0}
+  #menu{background:linear-gradient(90deg,rgba(6,10,16,.92) 0%,rgba(6,10,16,.55) 48%,rgba(6,10,16,.05) 100%);
+    justify-content:flex-start}
+  .tarjeta{width:min(460px,100%);display:flex;flex-direction:column;gap:14px}
+  .titulo{font-family:var(--titulo);font-size:clamp(46px,9vw,84px);line-height:.9;letter-spacing:1px}
+  .titulo b{display:block;color:var(--neon);text-shadow:0 0 34px rgba(0,240,192,.55)}
+  .lema{font-size:clamp(16px,2.4vw,20px);color:var(--ink);font-weight:600;opacity:.9}
+  .bPrincipal{font-family:var(--titulo);font-size:clamp(24px,4vw,30px);letter-spacing:3px;color:#04130f;
+    background:linear-gradient(180deg,#38ffd6,var(--neon));border-radius:18px;padding:16px 26px;
+    box-shadow:0 10px 34px rgba(0,240,192,.35),inset 0 -3px 0 rgba(0,0,0,.18);width:100%}
+  .bPrincipal:active{transform:translateY(2px) scale(.99)}
+  .bSecundario{font-weight:700;font-size:17px;letter-spacing:1.5px;border:1px solid var(--borde);background:var(--panel);
+    border-radius:14px;padding:12px 16px;flex:1}
+  .bSecundario:active{background:rgba(0,240,192,.16)}
+  .fila{display:flex;gap:10px;flex-wrap:wrap}
+  .record{font-size:15px;color:var(--dim);letter-spacing:1px;font-weight:600}
+  .record b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .ayuda{font-size:15px;line-height:1.55;color:var(--dim);background:rgba(10,16,26,.6);border:1px solid rgba(120,175,215,.16);
+    border-radius:14px;padding:10px 14px}
+  .ayuda b{color:var(--neon2)}
+  .opciones{display:flex;gap:8px;flex-wrap:wrap}
+  .op{font-size:14px;font-weight:700;letter-spacing:1px;border:1px solid rgba(120,175,215,.25);border-radius:12px;
+    padding:8px 12px;background:rgba(10,16,26,.6)}
+  .op span{color:var(--neon)}
+  .pie{font-size:12.5px;color:var(--dim);letter-spacing:.5px;line-height:1.5}
+  .pie a{color:var(--neon2);text-decoration:none}
+  .girar{display:none;font-size:14px;color:var(--ambar);font-weight:700;letter-spacing:1px}
+  @media (orientation:portrait) and (pointer:coarse){ .girar{display:block} }
 
-  /* Google exige mostrar la atribucion de las fuentes de las teselas visibles. */
-  #atribBar{position:fixed;right:20px;bottom:16px;max-width:46vw;text-align:right;
-    font-size:10.5px;line-height:1.6;color:rgba(232,238,248,.62);
-    text-shadow:0 1px 3px rgba(0,0,0,.9);pointer-events:none}
+  #pausa,#fin{background:rgba(5,8,13,.72);backdrop-filter:blur(4px)}
+  .caja{width:min(440px,100%);background:rgba(10,16,26,.92);border:1px solid var(--borde);border-radius:22px;
+    padding:22px;display:flex;flex-direction:column;gap:14px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .caja h2{margin:0;font-family:var(--titulo);font-weight:400;font-size:clamp(34px,7vw,48px);letter-spacing:3px}
+  #fin h2{color:var(--rojo)} #fin.record h2{color:var(--neon)}
+  .caja .detalle{color:var(--dim);font-size:15px;font-weight:600}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stats div{background:rgba(255,255,255,.04);border:1px solid rgba(120,175,215,.14);border-radius:12px;padding:8px 6px}
+  .stats b{display:block;font-family:var(--titulo);font-weight:400;font-size:22px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .stats span{font-size:12px;letter-spacing:1.5px;color:var(--dim);font-weight:700}
+  .stats .grande{grid-column:1/-1} .stats .grande b{font-size:34px;color:var(--neon)}
+
+  /* ---------------- controles tactiles */
+  .tactil{position:fixed;inset:0;pointer-events:none;z-index:9}
+  .t-boton{position:absolute;pointer-events:auto;touch-action:none;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:4px;background:rgba(10,16,26,.42);border:2px solid rgba(232,238,248,.28);border-radius:22px;
+    font-family:var(--titulo);font-size:15px;letter-spacing:2px;color:rgba(232,238,248,.9);backdrop-filter:blur(3px)}
+  .t-boton.activo{background:rgba(0,240,192,.30);border-color:var(--neon);transform:scale(.97)}
+  .t-gas{right:calc(18px + var(--sa-r));bottom:calc(18px + var(--sa-b));width:clamp(96px,15vw,132px);height:clamp(130px,30vh,190px)}
+  .t-freno{left:calc(18px + var(--sa-l));bottom:calc(18px + var(--sa-b));width:clamp(86px,13vw,118px);height:clamp(100px,22vh,140px)}
+  .t-gas i,.t-freno i{display:block;width:44%;height:36%;border-radius:8px;background:repeating-linear-gradient(0deg,rgba(232,238,248,.55) 0 4px,transparent 4px 9px)}
+  .t-izq,.t-der{bottom:calc(18px + var(--sa-b));width:clamp(84px,13vw,110px);height:clamp(84px,20vh,120px);font-size:34px}
+  .t-izq{left:calc(18px + var(--sa-l))}
+  .t-der{left:calc(30px + var(--sa-l) + clamp(84px,13vw,110px))}
+  .tactil[data-modo="inclinar"] .t-izq,.tactil[data-modo="inclinar"] .t-der{display:none}
+  .tactil[data-modo="botones"] .t-freno{left:auto;right:calc(30px + var(--sa-r) + clamp(96px,15vw,132px))}
+
+  #brand{position:fixed;right:calc(16px + var(--sa-r));bottom:calc(12px + var(--sa-b));font-size:11px;color:rgba(232,238,248,.45);
+    letter-spacing:3px;z-index:7;pointer-events:none;font-weight:700}
+  @media (pointer:coarse){ #brand{display:none} }
+  #atribBar{position:fixed;right:16px;bottom:16px;max-width:46vw;text-align:right;font-size:10.5px;line-height:1.6;
+    color:rgba(232,238,248,.62);text-shadow:0 1px 3px rgba(0,0,0,.9);pointer-events:none;z-index:7}
   #atribBar span{display:block}
-  #atribBar #osm{color:rgba(232,238,248,.42)}
+
+  @media (max-height:460px){
+    .tarjeta{gap:7px;width:min(540px,100%)} .titulo{font-size:36px} .titulo b{display:inline;margin-left:10px}
+    .lema{display:none} .ayuda{font-size:12.5px;line-height:1.4;padding:7px 11px}
+    .op{padding:6px 10px;font-size:12.5px} .pie{font-size:10.5px} .record{font-size:13px}
+    .bPrincipal{padding:10px 18px;font-size:22px} .caja{padding:12px 16px;gap:8px} .caja h2{font-size:30px}
+    .stats{grid-template-columns:repeat(5,1fr);gap:6px} .stats .grande{grid-column:auto}
+    .stats b{font-size:17px} .stats .grande b{font-size:20px} .stats span{font-size:10px;letter-spacing:1px}
+    .marca{padding:4px 16px 6px;min-width:140px} .marca .pts{font-size:24px} .marca .sub{font-size:11.5px}
+    .veloc{padding:4px 12px 6px;min-width:100px} .veloc .kmh{font-size:26px}
+    .bIcono{width:40px;height:40px;border-radius:12px} .bIcono svg{width:19px;height:19px}
+    #avisos{top:30%}
+  }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="boot">iniciando…</div>
-<div id="hud"></div>
-<div id="marcador"></div>
-<div id="brand"><b>AXIONA</b>HIGHWAY RACER</div>
-<div id="atribBar"><span id="atrib"></span><span id="osm">Trazado © colaboradores de OpenStreetMap</span></div>
-<div id="help">
-  <b>W</b> / <b>↑</b> acelerar &nbsp; <b>S</b> / <b>↓</b> frenar · marcha atrás &nbsp;
-  <b>A D</b> / <b>← →</b> volante<br>
-  <b>ESPACIO</b> freno de mano &nbsp; <b>C</b> cámara &nbsp; <b>H</b> ocultar interfaz &nbsp;
-  <b>R</b> reiniciar &nbsp; <b>ESC</b> pausa &nbsp; <b>M</b> silencio &nbsp;·&nbsp; mando compatible<br>
-  <span style="opacity:.7">cámaras: persecución · cabina · capó · cine · órbita · cenital</span>
+
+<div id="boot">
+  <div class="logo">JERO <b>RACER</b></div>
+  <div class="barra"><i id="bootBarra"></i></div>
+  <div class="msg" id="bootMsg">Cargando…</div>
 </div>
+
+<div id="hud" hidden></div>
+
+<div id="juego" hidden>
+  <div class="barraSup">
+    <div class="botonesSup">
+      <button class="bIcono" id="bPausa" aria-label="Pausa"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+      <button class="bIcono" id="bCamara" aria-label="Cambiar cámara"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+      <button class="bIcono" id="bSonido" aria-label="Sonido"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path id="onda" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
+    </div>
+    <div class="marca">
+      <div class="pts" id="hPuntos">0</div>
+      <div class="sub"><b id="hKm">0.00</b> KM · RÉCORD <b id="hRecord">0</b></div>
+    </div>
+    <div class="veloc">
+      <div class="kmh"><span id="hVel">0</span><i>KM/H</i></div>
+      <div class="fila"><div class="rpm"><i id="hRpm"></i></div><div class="marcha" id="hMarcha">1</div></div>
+    </div>
+  </div>
+  <div class="combo" id="hCombo">COMBO x<span id="hComboN">1</span><i class="t" id="hComboT"></i></div>
+  <div id="avisos"></div>
+</div>
+
+<div id="tactil" hidden></div>
+<div id="cuenta" hidden></div>
+
+<div id="menu" class="pantalla" hidden>
+  <div class="tarjeta">
+    <div class="titulo">JERO<b>RACER</b></div>
+    <div class="lema">Autopista infinita. Esquiva carros, buses y tractomulas a toda velocidad.</div>
+    <div class="record" id="mRecord"></div>
+    <button class="bPrincipal" id="bJugar">JUGAR</button>
+    <div class="ayuda" id="mAyuda"></div>
+    <div class="opciones">
+      <button class="op" id="oSonido">SONIDO: <span>SÍ</span></button>
+      <button class="op" id="oDireccion" hidden>DIRECCIÓN: <span>INCLINAR</span></button>
+      <button class="op" id="oCamara">CÁMARA: <span>PERSECUCIÓN</span></button>
+    </div>
+    <div class="girar">↻ Gira el teléfono en horizontal para jugar mejor</div>
+    <div class="pie">Un juego de <a href="https://axionasoft.com" target="_blank" rel="noopener">Axiona Desarrollos Inteligentes</a> · Sabaneta, Colombia<br>
+      Deportivo: «Car Concept», Khronos Group (CC BY 4.0) · Tráfico y escenario modelados por Axiona</div>
+  </div>
+</div>
+
+<div id="pausa" class="pantalla" hidden>
+  <div class="caja">
+    <h2>PAUSA</h2>
+    <button class="bPrincipal" id="bContinuar">CONTINUAR</button>
+    <div class="fila"><button class="bSecundario" id="bReiniciarP">REINICIAR</button><button class="bSecundario" id="bMenuP">MENÚ</button></div>
+  </div>
+</div>
+
+<div id="fin" class="pantalla" hidden>
+  <div class="caja">
+    <h2 id="fTitulo">CHOCASTE</h2>
+    <div class="detalle" id="fDetalle"></div>
+    <div class="stats">
+      <div class="grande"><b id="fPuntos">0</b><span>PUNTOS</span></div>
+      <div><b id="fKm">0</b><span>KILÓMETROS</span></div>
+      <div><b id="fRozones">0</b><span>ROZONES</span></div>
+      <div><b id="fCombo">0</b><span>MEJOR COMBO</span></div>
+      <div><b id="fVel">0</b><span>KM/H MÁXIMO</span></div>
+    </div>
+    <div class="record" id="fRecord"></div>
+    <button class="bPrincipal" id="bOtra">OTRA VEZ</button>
+    <div class="fila"><button class="bSecundario" id="bCompartir">COMPARTIR</button><button class="bSecundario" id="bMenuF">MENÚ</button></div>
+  </div>
+</div>
+
+<div id="brand">AXIONA · JERO RACER</div>
+<div id="atribBar" hidden><span id="atrib"></span><span id="osm">Trazado © colaboradores de OpenStreetMap</span></div>
 <script type="module" src="/src/main.js"></script>
 </body>
 </html>

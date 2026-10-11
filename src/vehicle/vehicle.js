@@ -143,6 +143,11 @@ export class Vehicle {
         .setTranslation(this.spawn.x, this.spawn.y, this.spawn.z)
         .setLinearDamping(0.05)
         .setAngularDamping(0.6)
+        // NUNCA DORMIR. Con la cuenta atras el coche pasa segundos quieto con
+        // el freno de mano, Rapier lo duerme, y el controlador de vehiculo
+        // aplica la fuerza del motor a un cuerpo dormido: no se movia al
+        // pisar el gas. Un solo cuerpo despierto no cuesta nada.
+        .setCanSleep(false)
         .setCcdEnabled(true));
 
     this.collider = this.world.createCollider(

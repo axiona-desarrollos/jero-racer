@@ -11,7 +11,8 @@ export default [
         console:'readonly', fetch:'readonly', Buffer:'readonly', process:'readonly',
         __dirname:'readonly', URLSearchParams:'readonly', location:'readonly',
         setTimeout:'readonly', clearTimeout:'readonly', setInterval:'readonly',
-        clearInterval:'readonly', KeyboardEvent:'readonly', Event:'readonly', localStorage:'readonly' },
+        clearInterval:'readonly', KeyboardEvent:'readonly', Event:'readonly', localStorage:'readonly',
+        screen:'readonly', removeEventListener:'readonly', DeviceOrientationEvent:'readonly' },
     },
     rules: {
       'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],

@@ -30,6 +30,8 @@ export class FixedLoop {
     this.render = render;
 
     this.acc = 0;
+    /** Escala de tiempo de la simulacion: < 1 es camara lenta (choques). */
+    this.escala = 1;
     this.running = false;
     this.fps = 60;
     this.lastSteps = 0;
@@ -71,7 +73,7 @@ export class FixedLoop {
     // Con un alpha fijo por frame el indicador miente distinto en cada maquina.
     if (dt > 0) this.fps += (1 / dt - this.fps) * (1 - Math.pow(0.03, dt));
 
-    this.acc += dt;
+    this.acc += dt * this.escala;
     let steps = 0;
     while (this.acc >= this.step && steps < this.maxSteps) {
       this.fixed(this.step);
