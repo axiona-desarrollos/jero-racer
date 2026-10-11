@@ -901,6 +901,10 @@ export const TIPOS = [
     paleta: [BLANCO, 0xe8e1cc, 0x1b4f93, 0x0c6b48, 0xb01d24],
   },
   {
+    id: 'busAxiona', nombre: 'bus', crear: () => bus({ anuncio: REGION.pubBusAxiona, largoAnuncio: 5.0 }),
+    peso: 4, pesado: true, paleta: [BLANCO, 0x1b4f93, 0x0c6b48],
+  },
+  {
     id: 'busTakamura', nombre: 'bus', crear: () => bus({ anuncio: REGION.pubBusTakamura, largoAnuncio: 5.0 }),
     peso: 4, pesado: true, paleta: [BLANCO, 0xe8e1cc, 0xb01d24],
   },

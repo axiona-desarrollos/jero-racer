@@ -110,6 +110,7 @@ export const REGION = Object.freeze({
   policiaLado:    [0, 136, 1024, 238],
   ejercitoLado:   [0, 400, 1024, 500],
   pubBusTakamura: [0, 800, 800, 928],
+  pubBusAxiona:   [0, 238, 1024, 392],
 });
 
 let atlasCache = null;
@@ -171,6 +172,7 @@ export function atlasCalcas() {
   PUB.franjaPolicia(g, REGION.policiaLado);
   PUB.franjaEjercito(g, REGION.ejercitoLado);
   PUB.busTakamura(g, REGION.pubBusTakamura);
+  PUB.axionaTikTok(g, REGION.pubBusAxiona);
 
   // Parrilla cromada de tractomula: barras horizontales.
   {

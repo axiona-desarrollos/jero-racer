@@ -83,6 +83,12 @@ export function lateralAxionasoft(g, r) {
   g.fillStyle = '#2b3442';
   ajustar(g, 'SOFTWARE · INTELIGENCIA ARTIFICIAL · APPS · WEB', ancho, Math.round(p.h * 0.13), TEXTO, '700');
   g.fillText('SOFTWARE · INTELIGENCIA ARTIFICIAL · APPS · WEB', x0 + 4, p.y + p.h * 0.64);
+  // Cuenta de TikTok sobre la parte oscura del barrido.
+  g.textAlign = 'right';
+  notaTikTok(g, p.x + p.w * 0.6, p.y + p.h * 0.9, Math.round(p.h * 0.15));
+  g.fillStyle = '#ffffff';
+  ajustar(g, 'TikTok @axiona.softwareia', p.w * 0.36, Math.round(p.h * 0.12), TEXTO, '700');
+  g.fillText('TikTok @axiona.softwareia', p.x + p.w - p.h * 0.1, p.y + p.h * 0.92);
 }
 
 export function mulaAxionasoft(g, r) {
@@ -98,7 +104,8 @@ export function mulaAxionasoft(g, r) {
   const s = p.h * 0.52;
   logoAxiona(g, p.x + p.h * 0.14, p.y + p.h * 0.1, s);
   const x0 = p.x + p.h * 0.14 + s + p.h * 0.14;
-  const ancho = p.w * 0.62;
+  // Deja libre el ultimo cuarto para la columna de TikTok.
+  const ancho = p.w * 0.5;
   const tam = ajustar(g, 'axionasoft.com', ancho, Math.round(p.h * 0.4), TITULO, '400');
   g.textBaseline = 'alphabetic'; g.textAlign = 'left';
   g.font = `400 ${tam}px ${TITULO}`;
@@ -110,13 +117,15 @@ export function mulaAxionasoft(g, r) {
   g.fillStyle = '#2b3442';
   ajustar(g, 'SOFTWARE QUE MUEVE A COLOMBIA', ancho, Math.round(p.h * 0.12), TEXTO, '700');
   g.fillText('SOFTWARE QUE MUEVE A COLOMBIA', x0 + 6, p.y + p.h * 0.6);
-  // Columna derecha: servicios.
+  // Columna derecha: la cuenta de TikTok de Axiona.
   g.textAlign = 'right';
   g.fillStyle = '#0a0e14';
-  g.font = `700 ${Math.round(p.h * 0.085)}px ${TEXTO}`;
-  ['APPS A LA MEDIDA', 'INTELIGENCIA ARTIFICIAL', 'PÁGINAS WEB'].forEach((l, i) => {
-    g.fillText(l, p.x + p.w - p.h * 0.12, p.y + p.h * (0.2 + i * 0.12));
-  });
+  g.font = `700 ${Math.round(p.h * 0.1)}px ${TEXTO}`;
+  g.fillText('SÍGUENOS EN TIKTOK', p.x + p.w - p.h * 0.12, p.y + p.h * 0.2);
+  const tamT = ajustar(g, '@axiona.softwareia', p.w * 0.26, Math.round(p.h * 0.16), TITULO, '400');
+  g.font = `400 ${tamT}px ${TITULO}`;
+  g.fillStyle = '#00a88f';
+  g.fillText('@axiona.softwareia', p.x + p.w - p.h * 0.12, p.y + p.h * 0.38);
 }
 
 export function traseraAxionasoft(g, r) {
@@ -130,8 +139,8 @@ export function traseraAxionasoft(g, r) {
   g.fillStyle = '#0a0e14';
   g.fillText('axionasoft.com', p.x + p.w / 2, p.y + p.h * 0.68);
   g.fillStyle = '#00f0c0';
-  g.font = `700 ${Math.round(p.h * 0.11)}px ${TEXTO}`;
-  g.fillText('¿NECESITA SOFTWARE? HABLEMOS', p.x + p.w / 2, p.y + p.h * 0.93);
+  ajustar(g, '♪ TIKTOK @axiona.softwareia', p.w * 0.92, Math.round(p.h * 0.12), TEXTO, '700');
+  g.fillText('♪ TIKTOK @axiona.softwareia', p.x + p.w / 2, p.y + p.h * 0.93);
 }
 
 // -------------------------------------------------------------- takamura
@@ -150,22 +159,25 @@ export function lateralTakamura(g, r) {
   // El ancho de un caracter chino cambia mucho entre fuentes del sistema: se
   // ajusta para que nunca invada la columna de la derecha.
   g.textBaseline = 'middle'; g.textAlign = 'left';
-  const tamCJK = ajustar(g, '高村物流', p.w * 0.5, Math.round(p.h * 0.62), CJK, '900');
+  const tamCJK = ajustar(g, '高村刺青', p.w * 0.5, Math.round(p.h * 0.62), CJK, '900');
   g.font = `900 ${tamCJK}px ${CJK}`;
   g.lineWidth = p.h * 0.03; g.strokeStyle = '#5a0006';
-  g.strokeText('高村物流', p.x + p.h * 0.18, p.y + p.h * 0.5);
+  g.strokeText('高村刺青', p.x + p.h * 0.18, p.y + p.h * 0.5);
   g.fillStyle = '#ffd23f';
-  g.fillText('高村物流', p.x + p.h * 0.18, p.y + p.h * 0.5);
+  g.fillText('高村刺青', p.x + p.h * 0.18, p.y + p.h * 0.5);
   const xd = p.x + p.w * 0.6;
   notaTikTok(g, xd + p.h * 0.12, p.y + p.h * 0.33, Math.round(p.h * 0.3));
   g.textAlign = 'left';
   g.fillStyle = '#ffffff';
   ajustar(g, 'SÍGUENOS EN TIKTOK', p.x + p.w - xd - p.h * 0.42, Math.round(p.h * 0.14), TEXTO, '700');
   g.fillText('SÍGUENOS EN TIKTOK', xd + p.h * 0.3, p.y + p.h * 0.33);
-  const tam = ajustar(g, '@TAKAMURA.0', p.x + p.w - xd - p.h * 0.12, Math.round(p.h * 0.26), TITULO, '400');
+  const tam = ajustar(g, '@esteban.takamura', p.x + p.w - xd - p.h * 0.12, Math.round(p.h * 0.26), TITULO, '400');
   g.font = `400 ${tam}px ${TITULO}`;
   g.fillStyle = '#ffffff';
-  g.fillText('@TAKAMURA.0', xd, p.y + p.h * 0.66);
+  g.fillText('@esteban.takamura', xd, p.y + p.h * 0.62);
+  g.fillStyle = '#ffd23f';
+  ajustar(g, 'TATTOO ARTIST · IG @takamura.0', p.x + p.w - xd - p.h * 0.12, Math.round(p.h * 0.12), TEXTO, '700');
+  g.fillText('TATTOO ARTIST · IG @takamura.0', xd, p.y + p.h * 0.82);
 }
 
 export function traseraTakamura(g, r) {
@@ -176,10 +188,10 @@ export function traseraTakamura(g, r) {
   g.fillStyle = '#ffd23f';
   g.fillText('高村', p.x + p.w / 2, p.y + p.h * 0.32);
   notaTikTok(g, p.x + p.w * 0.14, p.y + p.h * 0.72, Math.round(p.h * 0.24));
-  const tam = ajustar(g, '@TAKAMURA.0', p.w * 0.72, Math.round(p.h * 0.2), TITULO, '400');
+  const tam = ajustar(g, '@esteban.takamura', p.w * 0.72, Math.round(p.h * 0.2), TITULO, '400');
   g.font = `400 ${tam}px ${TITULO}`;
   g.fillStyle = '#ffffff';
-  g.fillText('@TAKAMURA.0', p.x + p.w * 0.56, p.y + p.h * 0.72);
+  g.fillText('@esteban.takamura', p.x + p.w * 0.56, p.y + p.h * 0.72);
 }
 
 // ------------------------------------------------------------------ jero
@@ -332,9 +344,9 @@ export function busTakamura(g, r) {
   g.fillStyle = '#ffffff';
   ajustar(g, 'SÍGUENOS EN TIKTOK', p.x + p.w - x0 - p.h * 0.2, Math.round(p.h * 0.22), TEXTO, '700');
   g.fillText('SÍGUENOS EN TIKTOK', x0, p.y + p.h * 0.3);
-  const tam = ajustar(g, '@TAKAMURA.0', p.x + p.w - x0 - p.h * 0.2, Math.round(p.h * 0.42), TITULO, '400');
+  const tam = ajustar(g, '@esteban.takamura', p.x + p.w - x0 - p.h * 0.2, Math.round(p.h * 0.42), TITULO, '400');
   g.font = `400 ${tam}px ${TITULO}`;
-  g.fillText('@TAKAMURA.0', x0, p.y + p.h * 0.68);
+  g.fillText('@esteban.takamura', x0, p.y + p.h * 0.68);
 }
 
 /**
@@ -343,21 +355,46 @@ export function busTakamura(g, r) {
  */
 export function pancartaPuente(g, r) {
   const p = caja(r);
-  g.fillStyle = '#0b0b12'; g.fillRect(p.x, p.y, p.w, p.h);
-  const mitad = p.x + p.w / 2;
-  // Mitad roja de Takamura a la derecha.
-  const grd = g.createLinearGradient(mitad, 0, p.x + p.w, 0);
-  grd.addColorStop(0, '#a50f1a'); grd.addColorStop(1, '#d61a26');
-  g.fillStyle = grd; g.fillRect(mitad, p.y, p.w / 2, p.h);
+  const tercio = p.w / 3;
+  const tramos = [
+    { fondo: ['#0b0b12', '#1a1a26'], texto: 'TIKTOK @jerofernandez222', color: '#ffffff', fuente: TITULO },
+    { fondo: ['#a50f1a', '#d61a26'], texto: '高村 · @esteban.takamura', color: '#ffd23f', fuente: `${TITULO},${CJK}` },
+    { fondo: ['#0a0e14', '#00806f'], texto: 'TIKTOK @axiona.softwareia', color: '#00f0c0', fuente: TITULO },
+  ];
   g.textBaseline = 'middle'; g.textAlign = 'center';
-  notaTikTok(g, p.x + p.h * 0.7, p.y + p.h * 0.5, Math.round(p.h * 0.8));
-  let tam = ajustar(g, 'SÍGUEME EN TIKTOK @jerofernandez222', p.w * 0.42, Math.round(p.h * 0.6), TITULO, '400');
+  tramos.forEach((t, i) => {
+    const x = p.x + i * tercio;
+    const grd = g.createLinearGradient(x, 0, x + tercio, 0);
+    grd.addColorStop(0, t.fondo[0]); grd.addColorStop(1, t.fondo[1]);
+    g.fillStyle = grd; g.fillRect(x, p.y, tercio, p.h);
+    notaTikTok(g, x + p.h * 0.6, p.y + p.h * 0.5, Math.round(p.h * 0.75));
+    const tam = ajustar(g, t.texto, tercio - p.h * 1.5, Math.round(p.h * 0.58), t.fuente, '400');
+    g.font = `400 ${tam}px ${t.fuente}`;
+    g.fillStyle = t.color;
+    g.fillText(t.texto, x + tercio / 2 + p.h * 0.4, p.y + p.h * 0.54);
+  });
+}
+
+/** Anuncio de la cuenta de TikTok de Axiona (bus y vallas). */
+export function axionaTikTok(g, r) {
+  const p = caja(r);
+  const grd = g.createLinearGradient(p.x, 0, p.x + p.w, 0);
+  grd.addColorStop(0, '#0a0e14'); grd.addColorStop(1, '#00695c');
+  g.fillStyle = grd; g.fillRect(p.x, p.y, p.w, p.h);
+  const s = p.h * 0.62;
+  logoAxiona(g, p.x + p.h * 0.18, p.y + (p.h - s) / 2, s);
+  notaTikTok(g, p.x + p.h * 0.2 + s + p.h * 0.3, p.y + p.h * 0.5, Math.round(p.h * 0.5));
+  const x0 = p.x + p.h * 0.2 + s + p.h * 0.62;
+  const ancho = p.x + p.w - x0 - p.h * 0.15;
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  g.fillStyle = '#00f0c0';
+  ajustar(g, 'SÍGUENOS EN TIKTOK', ancho, Math.round(p.h * 0.2), TEXTO, '700');
+  g.fillText('SÍGUENOS EN TIKTOK', x0, p.y + p.h * 0.36);
+  const tam = ajustar(g, '@axiona.softwareia', ancho, Math.round(p.h * 0.32), TITULO, '400');
   g.font = `400 ${tam}px ${TITULO}`;
   g.fillStyle = '#ffffff';
-  g.fillText('SÍGUEME EN TIKTOK @jerofernandez222', p.x + p.w * 0.27, p.y + p.h * 0.54);
-  notaTikTok(g, mitad + p.h * 0.7, p.y + p.h * 0.5, Math.round(p.h * 0.8));
-  tam = ajustar(g, '高村 · @TAKAMURA.0', p.w * 0.38, Math.round(p.h * 0.6), `${TITULO},${CJK}`, '400');
-  g.font = `400 ${tam}px ${TITULO},${CJK}`;
-  g.fillStyle = '#ffd23f';
-  g.fillText('高村 · @TAKAMURA.0', mitad + p.w * 0.27, p.y + p.h * 0.54);
+  g.fillText('@axiona.softwareia', x0, p.y + p.h * 0.72);
+  g.fillStyle = '#9fb3c8';
+  ajustar(g, 'SOFTWARE E INTELIGENCIA ARTIFICIAL · axionasoft.com', ancho, Math.round(p.h * 0.11), TEXTO, '700');
+  g.fillText('SOFTWARE E INTELIGENCIA ARTIFICIAL · axionasoft.com', x0, p.y + p.h * 0.9);
 }

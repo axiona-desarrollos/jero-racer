@@ -26,7 +26,7 @@ También funciona con un control de consola (gatillos y palanca izquierda).
 - **Tráfico con conductores**: cada vehículo sigue al de delante con el Modelo del Conductor Inteligente (IDM), frena con luz de freno y pone la direccional antes de cambiar de carril.
 - **Diez vehículos modelados en código** (`src/traffic/flota.js`): sedán, hatchback, taxi, SUV, pickup, van, bus, camión y dos tractomulas, con versión ligera para la distancia.
 - **Persecución**: por encima de 170 km/h llega la Policía Nacional; si se alarga, el Ejército y un helicóptero con reflector. Embisten y disparan, el carro se daña y al 100 % te detienen. Bajar de 170 km/h es rendirse: te dejan.
-- **Publicidad en la vía**: camiones, tractomulas, buses, vallas, puentes y paneles LED con axionasoft.com y las cuentas de TikTok @jerofernandez222 y @TAKAMURA.0.
+- **Publicidad en la vía**: camiones, tractomulas, buses, vallas, puentes y paneles LED con axionasoft.com y las cuentas de TikTok @jerofernandez222, @esteban.takamura y @axiona.softwareia (los botones del menú, la pausa y el final abren cada perfil).
 - **Inclinación del teléfono** como timón (`src/core/tactil.js`), calidad gráfica adaptable y resolución dinámica.
 - **App instalable** (PWA) que funciona sin conexión después de la primera carga.
 

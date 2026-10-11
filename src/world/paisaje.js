@@ -484,7 +484,8 @@ export class Paisaje {
       [L(['¿QUÉ MÁS,', 'PUES?']), V([['Caldas', '20 km'], ['Sabaneta', '8 km']])],
       [V([['Aranjuez']], { flecha: -0.6 }), L(['DE UNA,', 'PARCERO'])],
       [L(['SÍGUEME EN TIKTOK', '@JEROFERNANDEZ222']), V([['Sabaneta']], { flecha: 0.6 })],
-      [V([['Medellín', '10 km'], ['Itagüí', '4 km']]), L(['SÍGUENOS EN TIKTOK', '@TAKAMURA.0'])],
+      [V([['Medellín', '10 km'], ['Itagüí', '4 km']]), L(['SÍGUENOS EN TIKTOK', '@ESTEBAN.TAKAMURA'])],
+      [L(['TIKTOK', '@AXIONA.SOFTWAREIA']), V([['Caldas', '16 km'], ['Sabaneta', '6 km']])],
     ];
     this._letreros = new Map();
     this.porticos = [];
@@ -527,8 +528,10 @@ export class Paisaje {
       A(PUB.mulaJero),
       F('¡QUÉ NIVEL, MIJO!', 'SÍGUEME EN TIKTOK · @jerofernandez222', ['#0b0b12', '#fe2c55', '#25f4ee']),
       A(PUB.traseraTakamura),
-      F('¡ESO ES TODO, PARCE!', 'SÍGUENOS EN TIKTOK · @TAKAMURA.0', ['#a50f1a', '#d61a26', '#ffd23f']),
+      F('¡ESO ES TODO, PARCE!', 'SÍGUENOS EN TIKTOK · @esteban.takamura', ['#a50f1a', '#d61a26', '#ffd23f']),
       A(PUB.traseraJero),
+      A(PUB.axionaTikTok),
+      F('¡QUÉ CHIMBA DE SOFTWARE!', 'TIKTOK @axiona.softwareia · axionasoft.com', ['#0a0e14', '#00806f', '#00f0c0']),
     ];
     this._vallas = new Map();
     const geoValla = geometriaValla();

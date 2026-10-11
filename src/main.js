@@ -478,7 +478,7 @@ let fraseFin = '';
 
 async function compartir() {
   const pts = Math.round(carrera?.puntos ?? 0).toLocaleString('es-CO');
-  const texto = `Hice ${pts} puntos en JERO RACER esquivando tractomulas y a la tomba a ${Math.round(carrera?.velocidadMax ?? 0)} km/h. ¿Me ganas? Síguenos en TikTok: @jerofernandez222 y @TAKAMURA.0`;
+  const texto = `Hice ${pts} puntos en JERO RACER esquivando tractomulas y a la tomba a ${Math.round(carrera?.velocidadMax ?? 0)} km/h. ¿Me ganas? Síguenos en TikTok: @jerofernandez222, @esteban.takamura y @axiona.softwareia`;
   const url = 'https://jeroracer.axionasoft.com';
   try {
     if (navigator.share) { await navigator.share({ title: 'JERO RACER', text: texto, url }); return; }

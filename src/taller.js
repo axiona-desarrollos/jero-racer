@@ -108,10 +108,10 @@ window.solo = (id) => {
   scene.traverse(o => { if (o.isInstancedMesh && !o.userData.id) o.visible = !id; });
 };
 /** Vista de costado (lado +1 izquierdo, -1 derecho). */
-window.lado = (id, s = 1) => {
+window.lado = (id, s = 1, k = 1) => {
   window.solo(id);
   const f = filas.find(f => f.id === id);
-  const d = Math.max(f.largo, 4) * 0.95;
+  const d = Math.max(f.largo, 4) * 0.95 * k;
   camera.position.set(f.x + s * d, f.alto * 0.7 + 0.4, -f.largo * 0.12);
   controls.target.set(f.x, f.alto * 0.5, 0);
   controls.update();
