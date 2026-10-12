@@ -22,7 +22,7 @@ export class Interfaz {
       puntos: $('#hPuntos'), km: $('#hKm'), record: $('#hRecord'), vel: $('#hVel'),
       rpm: $('#hRpm'), marcha: $('#hMarcha'), combo: $('#hCombo'), comboN: $('#hComboN'), comboT: $('#hComboT'),
       avisos: $('#avisos'), mRecord: $('#mRecord'), mAyuda: $('#mAyuda'),
-      oSonido: $('#oSonido'), oDireccion: $('#oDireccion'), oCamara: $('#oCamara'),
+      oSonido: $('#oSonido'), oVoz: $('#oVoz'), oDireccion: $('#oDireccion'), oCamara: $('#oCamara'),
       bSonido: $('#bSonido'),
       persecucion: $('#hPersecucion'), danio: $('#hDanio'), danioB: $('#hDanioB'),
       persSub: $('#hPersecucion small'),
@@ -43,6 +43,7 @@ export class Interfaz {
     enlazar('#bCamara', 'camara');
     enlazar('#bSonido', 'sonido');
     enlazar('#oSonido', 'sonido');
+    enlazar('#oVoz', 'voz');
     enlazar('#oDireccion', 'direccion');
     enlazar('#oCamara', 'camara');
     enlazar('#oInstalar', 'instalar');
@@ -56,7 +57,7 @@ export class Interfaz {
   ocultarCarga() { this.n.boot.hidden = true; }
 
   // ---------------------------------------------------------------- menu
-  mostrarMenu({ recordPuntos, recordKm, movil, modoDireccion, sonido, camara }) {
+  mostrarMenu({ recordPuntos, recordKm, movil, modoDireccion, sonido, voz, camara }) {
     this.n.menu.hidden = false;
     this.n.juego.hidden = true;
     this.n.mRecord.innerHTML = recordPuntos > 0
@@ -68,10 +69,11 @@ export class Interfaz {
         : '<b>◀ ▶</b> para girar, <b>GAS</b> y <b>FRENO</b> a la derecha, <b>F. MANO</b> para derrapar. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía. Ojo con las <b>fotomultas</b>.')
       : '<b>W / ↑</b> acelerar · <b>S / ↓</b> frenar · <b>A D / ← →</b> girar · <b>ESPACIO</b> freno de mano · <b>C</b> cámara · <b>ESC</b> pausa · <b>M</b> sonido. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía; baja de 170 para que te dejen. Ojo con las <b>fotomultas</b>: a 50 y 70 km/h ya te cogen. También con control de consola.';
     this.n.oDireccion.hidden = !movil;
-    this.opciones({ modoDireccion, sonido, camara });
+    this.opciones({ modoDireccion, sonido, voz, camara });
   }
 
-  opciones({ modoDireccion, sonido, camara }) {
+  opciones({ modoDireccion, sonido, voz, camara }) {
+    if (voz != null) this.n.oVoz.querySelector('span').textContent = voz ? 'SÍ' : 'NO';
     if (sonido != null) {
       this.n.oSonido.querySelector('span').textContent = sonido ? 'SÍ' : 'NO';
       this.n.bSonido.style.opacity = sonido ? '1' : '0.45';

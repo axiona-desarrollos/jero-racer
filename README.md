@@ -28,6 +28,7 @@ También funciona con un control de consola (gatillos y palanca izquierda).
 - **Persecución**: por encima de 170 km/h llega la Policía Nacional; si se alarga, el Ejército y un helicóptero con reflector. Embisten y disparan, el carro se daña y al 100 % te detienen. Bajar de 170 km/h es rendirse: te dejan. Las patrullas también chocan con el tráfico: llevarlas contra una tractomula las deja fuera de combate y da puntos.
 - **Fotomultas**: cámaras de fotodetección como las de Medellín, a 50 y 70 km/h. Unas tienen aviso y otras no. Pasar por encima del límite dispara el flash, y cada multa tiene su chiste.
 - **Publicidad en la vía**: camiones, tractomulas, buses, vallas, puentes y paneles LED con axionasoft.com y las cuentas de TikTok @jerofernandez222, @esteban.takamura y @axiona.softwareia (los botones del menú, la pausa y el final abren cada perfil).
+- **Narrador con voces paisas**: el narrador de fútbol, la doña chismosa de las fotomultas, el tombo del megáfono y la ardilla comentan la partida y nombran las cuentas de TikTok cuando pasas junto a sus camiones. Se apaga en el menú (VOZ).
 - **Inclinación del teléfono** como timón (`src/core/tactil.js`), calidad gráfica adaptable y resolución dinámica.
 - **App instalable** (PWA) que funciona sin conexión después de la primera carga.
 
@@ -39,7 +40,8 @@ npm run models     # descarga el deportivo de Khronos y lo optimiza
 npm run dev        # http://localhost:8150
 ```
 
-- `npm test` — pruebas (dirección, tren motriz, cámara, tráfico).
+- `npm test` — pruebas (dirección, tren motriz, cámara, tráfico, fotomultas).
+- `npm run voces` — genera las voces del narrador (`scripts/guion-voz.mjs`) con Azure Speech; la clave va en `.env.voz`, que no se sube. `npm run voces:borrador` hace unas de prueba con edge-tts.
 - `npm run build:web` — compilación pública en `dist/`.
 - `/taller.html` (solo en desarrollo) — sala para revisar los modelos de la flota.
 

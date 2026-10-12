@@ -14,7 +14,10 @@
     "test:watch": "vitest",
     "lint": "eslint src tests",
     "models": "node scripts/fetch-models.mjs && node scripts/optimizar-modelos.mjs",
-    "build:web": "vite build --mode publico"
+    "build:web": "node scripts/revisar-voces.mjs && vite build --mode publico",
+    "voces": "node scripts/generar-voces.mjs",
+    "voces:borrador": "node scripts/generar-voces.mjs --borrador",
+    "build:web:voces-prueba": "node scripts/revisar-voces.mjs --permitir-borrador && vite build --mode publico"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",

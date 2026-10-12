@@ -118,12 +118,16 @@ export class EngineAudio {
     const master = this.master = ctx.createGain();
     master.gain.value = 0.0;
     master.connect(ctx.destination);
+    // Todo lo del juego pasa por aqui; la voz del narrador va directa a
+    // master y, mientras habla, esto baja para que se le entienda.
+    const agache = this.agache = ctx.createGain();
+    agache.connect(master);
 
     // limitador de seguridad: nada de picos que revienten los cascos
     const lim = ctx.createDynamicsCompressor();
     lim.threshold.value = -10; lim.knee.value = 8; lim.ratio.value = 10;
     lim.attack.value = 0.002; lim.release.value = 0.15;
-    lim.connect(master);
+    lim.connect(agache);
     this.bus = lim;
     // Los petardos van por su propio canal, con un limitador que solo frena
     // los picos de verdad. Por el del motor salian aplastados contra el
@@ -132,7 +136,7 @@ export class EngineAudio {
     limPetardos.threshold.value = -3; limPetardos.knee.value = 2; limPetardos.ratio.value = 20;
     limPetardos.attack.value = 0.001; limPetardos.release.value = 0.08;
     this.busPetardos = ctx.createGain(); this.busPetardos.gain.value = 0.7;
-    this.busPetardos.connect(limPetardos); limPetardos.connect(master);
+    this.busPetardos.connect(limPetardos); limPetardos.connect(agache);
 
     // ---------------------------------------------------------------- MOTOR
     this.osc = ctx.createOscillator();
@@ -600,6 +604,12 @@ export class EngineAudio {
       tono(0.5, 3951, 0.35, 0.05, 'sine');
       tono(0.58, 3520, 0.6, 0.08, 'sine');
     }
+  }
+
+  /** Baja el motor y los efectos mientras habla el narrador. */
+  agachar(si) {
+    if (!this.agache) return;
+    this.agache.gain.setTargetAtTime(si ? 0.42 : 1, this.ctx.currentTime, si ? 0.05 : 0.3);
   }
 
   setEnabled(on) {

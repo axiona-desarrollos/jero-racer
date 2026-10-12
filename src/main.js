@@ -45,6 +45,7 @@ import { elegirCalidad, esMovil, esIOS, EscalaDinamica } from './core/calidad.js
 import { Hud } from './ui/hud.js';
 import { Interfaz } from './ui/interfaz.js';
 import { EngineAudio } from './audio/engine.js';
+import { Narrador } from './audio/narrador.js';
 import { VehicleFX } from './vfx/vehicle-fx.js';
 import { ParticleSystem } from './vfx/particles.js';
 
@@ -123,7 +124,7 @@ addEventListener('resize', resize);
 // ------------------------------------------------------------ preferencias
 const PREFS_CLAVE = 'jr.prefs';
 const prefs = (() => {
-  const base = { sonido: true, direccion: 'inclinar', camara: 'persecucion' };
+  const base = { sonido: true, voz: true, direccion: 'inclinar', camara: 'persecucion' };
   try { return { ...base, ...JSON.parse(localStorage.getItem(PREFS_CLAVE) ?? '{}') }; } catch { return base; }
 })();
 function guardarPrefs() { try { localStorage.setItem(PREFS_CLAVE, JSON.stringify(prefs)); } catch { /* privado */ } }
@@ -135,6 +136,15 @@ const brakeM = new PedalModel();
 const engine = new Powertrain();
 const audio = new EngineAudio();
 audio.enabled = prefs.sonido;
+const narrador = new Narrador(audio);
+narrador.activo = prefs.voz;
+/** Cuantas partidas han terminado en esta sesion (la cuna de TikTok va cada tres). */
+let finales = 0;
+
+/** 'Jero', 'Takamura' o 'Axiona' si el vehiculo lleva su publicidad. */
+function marcaDe(id = '') {
+  return /Jero/.test(id) ? 'Jero' : /Takamura/.test(id) ? 'Takamura' : /Axiona/.test(id) ? 'Axiona' : null;
+}
 
 let vehicle, loop, hud, sun, fx, director, ciudad = null, tactil = null, escala = null;
 let autopista = null, paisaje = null, trafico = null, carrera = null, persecucion = null, fotomultas = null;
@@ -166,7 +176,7 @@ let wakeLock = null;
 if (import.meta.env.DEV) {
   window.__jr = {
     get vehicle() { return vehicle; }, get trafico() { return trafico; }, get persecucion() { return persecucion; },
-    get carrera() { return carrera; }, get fotomultas() { return fotomultas; }, get estado() { return estado; }, get fx() { return fx; }, ui,
+    get carrera() { return carrera; }, get fotomultas() { return fotomultas; }, get estado() { return estado; }, get fx() { return fx; }, ui, narrador, audio,
   };
 }
 
@@ -330,7 +340,7 @@ function conectarInterfaz() {
 
   // El navegador solo deja sonar audio tras un gesto. Cualquier toque o
   // tecla sirve; el boton JUGAR lo vuelve a intentar por si acaso.
-  const arrancarAudio = () => { if (prefs.sonido) audio.start(); };
+  const arrancarAudio = () => { if (prefs.sonido) { audio.start(); narrador.cargar(); } };
   addEventListener('pointerdown', arrancarAudio);
   addEventListener('keydown', arrancarAudio);
 
@@ -338,6 +348,7 @@ function conectarInterfaz() {
     // TODO LO QUE EXIGE UN GESTO VA PRIMERO Y SIN AWAIT: el audio y el permiso
     // de inclinacion de iOS caducan si antes se espera a cualquier promesa.
     audio.start();
+    narrador.cargar();
     if (tactil && prefs.direccion === 'inclinar') {
       tactil.inclinacion.pedirPermiso().then(ok => {
         if (!ok) {
@@ -369,8 +380,14 @@ function conectarInterfaz() {
   ui.on.sonido = () => {
     prefs.sonido = !prefs.sonido; guardarPrefs();
     audio.setEnabled(prefs.sonido);
-    if (prefs.sonido) audio.start();
+    if (prefs.sonido) { audio.start(); narrador.cargar(); } else narrador.callar();
     ui.opciones({ sonido: prefs.sonido });
+  };
+  ui.on.voz = () => {
+    prefs.voz = !prefs.voz; guardarPrefs();
+    narrador.activo = prefs.voz;
+    if (!prefs.voz) narrador.callar();
+    ui.opciones({ voz: prefs.voz });
   };
   ui.on.direccion = () => cambiarDireccion(prefs.direccion === 'inclinar' ? 'botones' : 'inclinar');
   ui.on.compartir = () => compartir();
@@ -396,7 +413,7 @@ function mostrarMenu() {
     recordKm: carrera?.recordKm ?? 0,
     movil: TACTIL,
     modoDireccion: prefs.direccion,
-    sonido: prefs.sonido,
+    sonido: prefs.sonido, voz: prefs.voz,
     camara: etiquetaCamara(prefs.camara),
   });
 }
@@ -474,6 +491,10 @@ function alChocar(contra, p) {
   director.sacudir(0.25 + f * 0.6);
   if (navigator.vibrate) navigator.vibrate([0, 220, 60, 90]);
   fraseFin = una(FRASES.choque);
+  const marca = marcaDe(contra?.tipo?.id);
+  narrador.decir(marca ? 'choque' + marca : 'choque');
+  // Y cada tres partidas (y en la primera), la cuna de las cuentas de TikTok.
+  if (!marca && finales++ % 3 === 0) narrador.decir('tiktok');
   estado = 'fin';
   input.conduccion = false;
   tLento = 1.1;
@@ -487,6 +508,8 @@ function alDetener() {
   director.sacudir(0.35);
   if (navigator.vibrate) navigator.vibrate([0, 300, 80, 300]);
   fraseFin = una(FRASES.detenido);
+  narrador.decir('detenido');
+  if (finales++ % 3 === 0) narrador.decir('tiktok');
   estado = 'fin';
   input.conduccion = false;
   tLento = 1.1;
@@ -729,6 +752,7 @@ function presentar(alpha, dt) {
       ultimoNumero = n;
       ui.cuenta(n);
       audio.pitido(n === '¡YA!');
+      if (n === '¡YA!') narrador.decir('arranque');
     }
     if (tCuenta <= 0.2) {
       estado = 'juego';
@@ -778,7 +802,11 @@ function presentar(alpha, dt) {
     if (ev.fotomulta) { avisoFotomulta(ev.fotomulta); continue; }
     const cerca = Math.max(0, (3 - ev.hueco) / 3);
     audio.paso(ev.lado, cerca * Math.min(1, Math.abs(ev.relativa) / 30), ev.pesado);
+    const marca = estado === 'juego' && cerca > 0.3 ? marcaDe(ev.tipo?.id) : null;
+    if (marca) narrador.decir('rozon' + marca);
     if (ev.bono) {
+      const k = ev.bono.combo;
+      narrador.decir(k >= 5 ? 'combo5' : k >= 3 ? 'combo3' : 'rozon');
       audio.bono(ev.bono.combo);
       if (navigator.vibrate) navigator.vibrate(18);
       const c = ev.bono.combo;
@@ -789,13 +817,14 @@ function presentar(alpha, dt) {
   if (carrera && carrera.recordBatido && !avisoRecord && estado === 'juego') {
     avisoRecord = true;
     ui.aviso(una(FRASES.record), 'sigue así', 'ambar');
+    narrador.decir('record');
   }
   if (carrera && estado === 'juego' && tel) {
     for (const v of [150, 200, 240]) {
-      if (tel.speed >= v && !yaDicho.has('v' + v)) { yaDicho.add('v' + v); ui.aviso(FRASES.velocidad[v], `${v} km/h`, 'ambar'); }
+      if (tel.speed >= v && !yaDicho.has('v' + v)) { yaDicho.add('v' + v); ui.aviso(FRASES.velocidad[v], `${v} km/h`, 'ambar'); narrador.decir('velocidad' + v); }
     }
-    if (carrera.danio >= 50 && !yaDicho.has('d50')) { yaDicho.add('d50'); ui.aviso('¡ESO VA A SALIR CARO, MIJO!', 'daño 50 %', 'rojo'); }
-    if (carrera.danio >= 80 && !yaDicho.has('d80')) { yaDicho.add('d80'); ui.aviso('¡EL CARRO YA NO DA MÁS!', 'un golpe más y lo detienen', 'rojo'); }
+    if (carrera.danio >= 50 && !yaDicho.has('d50')) { yaDicho.add('d50'); ui.aviso('¡ESO VA A SALIR CARO, MIJO!', 'daño 50 %', 'rojo'); narrador.decir('danio50'); }
+    if (carrera.danio >= 80 && !yaDicho.has('d80')) { yaDicho.add('d80'); ui.aviso('¡EL CARRO YA NO DA MÁS!', 'un golpe más y lo detienen', 'rojo'); narrador.decir('danio80'); }
   }
   sonidoPersecucion();
   humoDeDanio(dt);
@@ -837,21 +866,29 @@ function avisoPersecucion(ev) {
   switch (ev.tipo) {
     case 'inicio':
       ui.aviso(una(FRASES.persecucion), 'baje de 170 km/h para que lo dejen', 'rojo');
+      narrador.decir('persecucion');
       break;
     case 'fin':
-      if (estado === 'juego') ui.aviso(una(FRASES.escape), ev.bono ? `+${ev.bono} por la persecución` : 'lo dejaron', 'ambar');
+      if (estado === 'juego') {
+        ui.aviso(una(FRASES.escape), ev.bono ? `+${ev.bono} por la persecución` : 'lo dejaron', 'ambar');
+        narrador.decir('escape');
+      }
       break;
     case 'ejercito':
       ui.aviso(una(FRASES.ejercito), 'esto se puso serio, mijo', 'rojo');
+      narrador.decir('ejercito');
       break;
     case 'helicoptero':
       ui.aviso(una(FRASES.helicoptero), 'helicóptero de la Policía', 'rojo');
+      narrador.decir('helicoptero');
       break;
     case 'megafono':
       ui.aviso(una(FRASES.megafono), '📢 megáfono', 'rojo');
+      narrador.decir('megafono');
       break;
     case 'tiroteo':
       ui.aviso(una(FRASES.tiroteo), '¡le están disparando!', 'rojo');
+      narrador.decir('tiroteo');
       break;
     case 'estrellada': {
       const d = distanciaAlJugador(ev);
@@ -861,6 +898,7 @@ function avisoPersecucion(ev) {
       if (estado === 'juego') {
         const titulo = ev.militar ? una(FRASES.estrelladaEjercito) : una(FRASES.estrellada);
         ui.aviso(titulo, `contra ${articulo(ev.contra)}${ev.bono ? ` · +${ev.bono}` : ''}`, 'ambar');
+        narrador.decir(ev.militar ? 'estrelladaEjercito' : /tractomula|camión|bus/.test(ev.contra) ? 'estrelladaMula' : 'estrellada');
       }
       break;
     }
@@ -877,6 +915,7 @@ function avisoPersecucion(ev) {
           0.3 + Math.random() * 0.4, 0.05 + Math.random() * 0.04, 2.4, 1.2, 0.3);
       }
       ui.aviso(ev.chatarra ? '¡SE COMIÓ LA PATRULLA ESTRELLADA!' : una(FRASES.golpe), `daño ${Math.round(carrera.danio)} %`, 'rojo');
+      narrador.decir('golpe');
       break;
     }
     case 'disparo': {
@@ -917,12 +956,16 @@ function chispazo(ev, n) {
  */
 function avisoFotomulta(f) {
   if (f.salvada != null) {
-    if (f.salvada) ui.aviso('¡SE SALVÓ DE LA FOTOMULTA!', `pasó juicioso a ${Math.round(f.kmh)} km/h · +${f.salvada}`, 'ambar');
+    if (f.salvada) {
+      ui.aviso('¡SE SALVÓ DE LA FOTOMULTA!', `pasó juicioso a ${Math.round(f.kmh)} km/h · +${f.salvada}`, 'ambar');
+      narrador.decir('salvada');
+    }
     return;
   }
   if (!f.n) return;
   ui.flash();
   audio.fotomulta(f.n);
+  narrador.decir(f.oculta ? 'fotomultaOculta' : f.n === 1 ? 'fotomulta' : 'fotomultaOtra');
   if (navigator.vibrate) navigator.vibrate([0, 35, 70, 35]);
   let titulo, sub;
   if (f.oculta) {
@@ -1025,6 +1068,7 @@ function reiniciar() {
     trafico.reiniciar(SPAWN.z, SPAWN.x);
     carrera.reiniciar(SPAWN.z);
     persecucion.reiniciar();
+    narrador.reiniciar();
     yaDicho.clear();
     zFoto = null;
   }

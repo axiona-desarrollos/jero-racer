@@ -9,7 +9,7 @@
      - Codigo, modelos, fuentes e imagenes: cache primero. Los .js llevan
        hash en el nombre, asi que nunca se sirve uno viejo con nombre nuevo. */
 
-const VERSION = 'jero-v7';
+const VERSION = 'jero-v8';
 const BASICOS = ['./', './index.html', './manifest.webmanifest', './icono-192.png', './icono-512.png'];
 
 self.addEventListener('install', (e) => {
