@@ -15,10 +15,12 @@
    ellos con licencia libre.
 
    CAMPOS QUE HAY QUE AFINAR A MANO POR CADA MODELO
-     giro    cuartos de vuelta para dejarlo mirando a +Z (el juego mira a +Z)
-     largo   a cuanto se escala; manda sobre el tamaño del modelo original
-     ejes    z del eje delantero y del trasero, ya en metros del juego
-   El resto (radio de rueda, via, altura) lo mide el importador solo.
+     giro     cuartos de vuelta para dejarlo mirando a +Z (el juego mira a +Z)
+     largo    a cuanto se escala; manda sobre el tamaño del modelo original
+     escapes  donde salen las llamaradas del petardeo, en metros del carro
+              ya normalizado (origen en el suelo, centro de la planta). Se
+              miden sobre las mallas del tubo de escape de cada modelo.
+   El resto (radio de rueda, via, altura) lo mide vehicle/normalizar.js.
    ========================================================================== */
 
 /**
@@ -35,6 +37,8 @@
  * @property {number} giro       cuartos de vuelta en Y para mirar a +Z
  * @property {number} masa       kg
  * @property {number} grados     angulo maximo de direccion
+ * @property {{delante:number, detras:number}} agarre  friccion de cada eje
+ * @property {{x:number[], y:number, z:number}} escapes salidas del escape
  */
 
 export const CARROS = [
@@ -49,6 +53,8 @@ export const CARROS = [
     largo: 4.79, giro: 0, masa: 1830, grados: 36,
     // Reparto de agarre: el muscle car es de trasera suelta.
     agarre: { delante: 1.95, detras: 1.52 },
+    // Dos colas dobles, una en cada esquina del difusor.
+    escapes: { x: [-0.68, -0.57, 0.57, 0.68], y: 0.31, z: -2.29 },
   },
   {
     id: 'centenario',
@@ -61,6 +67,8 @@ export const CARROS = [
     largo: 4.92, giro: 0, masa: 1570, grados: 34,
     // Motor central y tracción total: agarra mucho más y subvira poco.
     agarre: { delante: 2.15, detras: 2.05 },
+    // Tres salidas en fila en el centro, como el de verdad.
+    escapes: { x: [-0.16, 0, 0.16], y: 0.34, z: -2.37 },
   },
   {
     id: 'm4csl',
@@ -72,6 +80,8 @@ export const CARROS = [
     licencia: 'CC BY 4.0',
     largo: 4.80, giro: 0, masa: 1625, grados: 37,
     agarre: { delante: 2.05, detras: 1.78 },
+    // Cuatro salidas juntas en el centro del difusor, dos a cada lado.
+    escapes: { x: [-0.33, -0.15, 0.15, 0.33], y: 0.34, z: -2.37 },
   },
 ];
 

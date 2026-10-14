@@ -137,6 +137,13 @@ async function cargarSketchfab(f, CAL, boot) {
   // Los carros de los demas son clones de este: si compartieran los
   // materiales de los pilotos, se encenderian cada vez que UNO frena.
   const plantilla = raiz.clone(true);
+  // Y sus ruedas, derechas: el giro de fabrica lo deshace Vehicle en el carro
+  // propio, pero los clones giran la rueda sobre X a pelo y una delantera
+  // torcida bailaria como una moneda.
+  for (const n of ['WheelFrontL', 'WheelFrontR', 'WheelRearL', 'WheelRearR']) {
+    const rueda = plantilla.getObjectByName(n);
+    if (rueda) rueda.rotation.y = 0;
+  }
   const propios = new Map();
   plantilla.traverse(o => {
     if (!o.isMesh) return;

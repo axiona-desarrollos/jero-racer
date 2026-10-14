@@ -83,7 +83,9 @@ export class Remotos {
     const ruedas = ['WheelFrontL', 'WheelFrontR', 'WheelRearL', 'WheelRearR']
       .map(n => cuerpo.getObjectByName(n)).filter(Boolean);
     const radio = ruedas.length
-      ? new THREE.Box3().setFromObject(ruedas[0]).getSize(_v).y / 2 || 0.34
+      // Vertice a vertice: con la caja rapida una rueda girada sobre su eje
+      // mide hasta un 40 % mas y el clon rodaria a otra velocidad.
+      ? new THREE.Box3().setFromObject(ruedas[0], true).getSize(_v).y / 2 || 0.34
       : 0.34;
 
     this.escena.add(grupo);
