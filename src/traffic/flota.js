@@ -19,7 +19,8 @@
 import * as THREE from 'three';
 import {
   Constructor, M, conMat, REGION, uvDe, cuerpoLoft, habitaculoLoft,
-  anchoEn, interpolar, matrizDe, fijarDetalle, detalle,
+  interpolar, matrizDe, fijarDetalle,
+  panelEnSuperficie, pasoDeRueda,
 } from './modelado.js';
 
 const calca = (region, base = M.blanco) => conMat(base, { uv: uvDe(region) });
@@ -27,89 +28,6 @@ const LUZ_AMBAR = { c: 0xffa21a, r: 0.3, m: 0.0, l: 5 };
 const LETRERO = (region) => ({ c: 0xffffff, r: 0.4, m: 0.0, l: 5, uv: uvDe(region) });
 
 // ----------------------------------------------------------- utilidades
-/**
- * Z de la superficie de la carroceria en el morro (+1) o la cola (-1) para
- * un punto (x, y). Se busca desde el extremo hacia dentro hasta encontrar la
- * primera seccion que contiene el punto.
- */
-function zSuperficie(est, x, y, extremo) {
-  const zFin = extremo > 0 ? est[est.length - 1].z : est[0].z;
-  for (let d = 0; d < 1.5; d += 0.004) {
-    const z = zFin - extremo * d;
-    const s = interpolar(est, z);
-    if (y < s.yb || y > s.yt) continue;
-    if (anchoEn(est, z, y) >= Math.abs(x)) return z;
-  }
-  return zFin - extremo * 1.5;
-}
-
-const _n = new THREE.Vector3();
-const _m = new THREE.Matrix4();
-const _o = new THREE.Vector3(0, 0, 0);
-const _arriba = new THREE.Vector3(0, 1, 0);
-
-/**
- * Panel pegado a la superficie del morro o la cola, orientado segun la
- * normal real en ese punto (faros, pilotos, intermitentes).
- */
-function panelEnSuperficie(c, est, extremo, x, y, ancho, alto, mat, grosor = 0.05) {
-  const z = zSuperficie(est, x, y, extremo);
-  const h = 0.04;
-  const dzdx = (zSuperficie(est, x + h, y, extremo) - zSuperficie(est, x - h, y, extremo)) / (2 * h);
-  const dzdy = (zSuperficie(est, x, y + h, extremo) - zSuperficie(est, x, y - h, extremo)) / (2 * h);
-  // Normal hacia fuera: en el morro (−dz/dx, −dz/dy, 1), en la cola el opuesto en z.
-  _n.set(-dzdx * extremo, -dzdy * extremo, extremo).normalize();
-  // Se acota la inclinacion: en una esquina muy redonda la normal se va casi
-  // de lado y la pieza quedaria de canto.
-  _n.y = Math.max(-0.5, Math.min(0.5, _n.y));
-  _n.normalize();
-  _m.lookAt(_n, _o, _arriba);
-  _m.setPosition(x, y, z);
-  const fino = detalle() >= 1;
-  const geo = new THREE.ExtrudeGeometry(redondo(ancho, alto, Math.min(ancho, alto) * 0.35), {
-    depth: grosor, bevelEnabled: fino, bevelThickness: 0.008, bevelSize: 0.008,
-    bevelSegments: 1, curveSegments: fino ? 3 : 1,
-  });
-  geo.translate(0, 0, -grosor / 2);
-  c.agregar(geo, mat, _m);
-}
-
-function redondo(w, h, r) {
-  const s = new THREE.Shape();
-  const x = -w / 2, y = -h / 2;
-  r = Math.min(r, w / 2, h / 2);
-  s.moveTo(x + r, y);
-  s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
-  s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
-  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
-  return s;
-}
-
-/**
- * Pase de rueda: arco extruido alrededor de la parte de arriba del neumatico.
- * Es lo que hace que una rueda parezca metida en la carroceria y no pegada.
- */
-function pasoDeRueda(c, x, z, rRueda, mat, { holgura = 0.02, ancho = 0.07, fondo = 0.07 } = {}) {
-  const ri = rRueda + holgura, re = ri + ancho;
-  const s = new THREE.Shape();
-  const a0 = -0.22, a1 = Math.PI + 0.22;
-  const N = detalle() >= 1 ? 12 : 6;
-  for (let i = 0; i <= N; i++) {
-    const a = a0 + (a1 - a0) * (i / N);
-    const px = Math.cos(a) * re, py = Math.sin(a) * re;
-    if (i === 0) s.moveTo(px, py); else s.lineTo(px, py);
-  }
-  for (let i = N; i >= 0; i--) {
-    const a = a0 + (a1 - a0) * (i / N);
-    s.lineTo(Math.cos(a) * ri, Math.sin(a) * ri);
-  }
-  const geo = new THREE.ExtrudeGeometry(s, { depth: fondo, bevelEnabled: false, curveSegments: 4 });
-  geo.translate(0, 0, -fondo / 2);
-  geo.rotateY(Math.PI / 2);   // el arco pasa al plano YZ, extruido en X
-  c.agregar(geo, mat, matrizDe(x, rRueda, z));
-}
-
 /** Ruedas de un eje: lista para el sistema de instancias. */
 function eje(z, via, r, ancho, camion = false, gemela = 0) {
   const out = [];

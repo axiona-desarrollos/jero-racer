@@ -274,6 +274,10 @@ export class Constructor {
         // en una arista no dice hacia donde mira la cara.
         _b.sub(_a); _c.sub(_a); _n.crossVectors(_b, _c).normalize();
         m = material(cx, cy, cz, _n.x, _n.y, _n.z);
+        // Devolver null descarta el triangulo. Asi una misma malla se puede
+        // repartir entre dos constructores (la carroceria opaca y el vidrio
+        // transparente del coche del jugador van en geometrias distintas).
+        if (!m) continue;
       }
       _col.setHex(m.c ?? 0xffffff, THREE.SRGBColorSpace);
       const uvr = m.uv;
@@ -548,6 +552,83 @@ export function anchoEn(estaciones, z, y) {
   const v = Math.min(1, Math.abs((y - yc) / hy));
   const n = y >= yc ? s.na : s.nb;
   return s.w * Math.pow(Math.max(0, 1 - Math.pow(v, n)), 1 / n);
+}
+
+// ------------------------------------------------ piezas pegadas a la chapa
+const _sN = new THREE.Vector3();
+const _sM = new THREE.Matrix4();
+const _sO = new THREE.Vector3(0, 0, 0);
+const _sArriba = new THREE.Vector3(0, 1, 0);
+
+/**
+ * Z de la superficie de la carroceria en el morro (+1) o la cola (-1) para
+ * un punto (x, y). Se busca desde el extremo hacia dentro hasta encontrar la
+ * primera seccion que contiene el punto.
+ */
+export function zSuperficie(est, x, y, extremo) {
+  const zFin = extremo > 0 ? est[est.length - 1].z : est[0].z;
+  for (let d = 0; d < 1.5; d += 0.004) {
+    const z = zFin - extremo * d;
+    const s = interpolar(est, z);
+    if (y < s.yb || y > s.yt) continue;
+    if (anchoEn(est, z, y) >= Math.abs(x)) return z;
+  }
+  return zFin - extremo * 1.5;
+}
+
+/**
+ * Panel pegado a la superficie del morro o la cola, orientado segun la
+ * normal real en ese punto (faros, pilotos, intermitentes).
+ */
+export function marcoEnSuperficie(est, extremo, x, y, salida = new THREE.Matrix4()) {
+  const z = zSuperficie(est, x, y, extremo);
+  const h = 0.04;
+  const dzdx = (zSuperficie(est, x + h, y, extremo) - zSuperficie(est, x - h, y, extremo)) / (2 * h);
+  const dzdy = (zSuperficie(est, x, y + h, extremo) - zSuperficie(est, x, y - h, extremo)) / (2 * h);
+  // Normal hacia fuera: en el morro (-dz/dx, -dz/dy, 1), en la cola el opuesto en z.
+  _sN.set(-dzdx * extremo, -dzdy * extremo, extremo).normalize();
+  // Se acota la inclinacion: en una esquina muy redonda la normal se va casi
+  // de lado y la pieza quedaria de canto.
+  _sN.y = Math.max(-0.5, Math.min(0.5, _sN.y));
+  _sN.normalize();
+  salida.lookAt(_sN, _sO, _sArriba);
+  salida.setPosition(x, y, z);
+  return salida;
+}
+
+export function panelEnSuperficie(c, est, extremo, x, y, ancho, alto, mat, grosor = 0.05) {
+  marcoEnSuperficie(est, extremo, x, y, _sM);
+  const fino = DETALLE >= 1;
+  const geo = new THREE.ExtrudeGeometry(rectRedondeado(ancho, alto, Math.min(ancho, alto) * 0.35), {
+    depth: grosor, bevelEnabled: fino, bevelThickness: 0.008, bevelSize: 0.008,
+    bevelSegments: 1, curveSegments: fino ? 3 : 1,
+  });
+  geo.translate(0, 0, -grosor / 2);
+  c.agregar(geo, mat, _sM);
+}
+
+/**
+ * Pase de rueda: arco extruido alrededor de la parte de arriba del neumatico.
+ * Es lo que hace que una rueda parezca metida en la carroceria y no pegada.
+ */
+export function pasoDeRueda(c, x, z, rRueda, mat, { holgura = 0.02, ancho = 0.07, fondo = 0.07 } = {}) {
+  const ri = rRueda + holgura, re = ri + ancho;
+  const s = new THREE.Shape();
+  const a0 = -0.22, a1 = Math.PI + 0.22;
+  const N = DETALLE >= 1 ? 12 : 6;
+  for (let i = 0; i <= N; i++) {
+    const a = a0 + (a1 - a0) * (i / N);
+    const px = Math.cos(a) * re, py = Math.sin(a) * re;
+    if (i === 0) s.moveTo(px, py); else s.lineTo(px, py);
+  }
+  for (let i = N; i >= 0; i--) {
+    const a = a0 + (a1 - a0) * (i / N);
+    s.lineTo(Math.cos(a) * ri, Math.sin(a) * ri);
+  }
+  const geo = new THREE.ExtrudeGeometry(s, { depth: fondo, bevelEnabled: false, curveSegments: 4 });
+  geo.translate(0, 0, -fondo / 2);
+  geo.rotateY(Math.PI / 2);   // el arco pasa al plano YZ, extruido en X
+  c.agregar(geo, mat, matrizDe(x, rRueda, z));
 }
 
 /**

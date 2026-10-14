@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TIPOS, TIPOS_PERSECUCION, fabricar } from './traffic/flota.js';
 import { materialFlota, geometriaRueda, prepararInstancias } from './traffic/modelado.js';
 import { instalarCielo, alinearSol } from './world/cielo.js';
+import { construirFuria, PINTURAS } from './vehicle/muscle.js';
 
 // Las calcomanias se dibujan con estas fuentes: hay que esperarlas.
 await Promise.race([
@@ -34,6 +35,36 @@ const suelo = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshSt
 suelo.rotation.x = -Math.PI / 2;
 suelo.receiveShadow = true;
 scene.add(suelo);
+
+// ?furia  -> solo el coche del jugador, para revisar su modelado de cerca.
+if (new URLSearchParams(location.search).has('furia')) {
+  const { objeto, material } = construirFuria({ detalle: 1 });
+  scene.add(objeto);
+  const tris = objeto.children.reduce((a, o) => a + (o.isMesh ? o.geometry.getAttribute('position').count / 3 : 0), 0);
+  console.log('FURIA GT ·', Math.round(tris), 'triángulos en la carrocería');
+  camera.position.set(4.2, 1.5, 5.2);
+  controls.target.set(0, 0.72, 0);
+  controls.update();
+  sol.target.position.set(0, 0, 0);
+  sol.position.copy(cielo.direccionSol).multiplyScalar(80);
+  const u = material.userData.uniformes;
+  window.pintar = (i) => { const p = PINTURAS[i % PINTURAS.length]; u.uTinte1.value.setHex(p.t1); u.uTinte2.value.setHex(p.t2); return p.nombre; };
+  window.luces = (freno = 1, izq = 0, der = 0, rev = 0) => u.uEstado.value.set(freno, izq, der, rev);
+  window.ver = (x, y, z, tx = 0, ty = 0.72, tz = 0) => { camera.position.set(x, y, z); controls.target.set(tx, ty, tz); controls.update(); };
+  window.foto = async (n) => {
+    renderer.render(scene, camera);
+    return fetch('http://localhost:8199/?n=' + n, { method: 'POST', body: canvas.toDataURL('image/jpeg', 0.9) }).then(r => r.text());
+  };
+  function resizeF() {
+    renderer.setSize(innerWidth, innerHeight, false);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+  }
+  addEventListener('resize', resizeF);
+  resizeF();
+  renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+  window.LISTO = true;
+} else {
 
 const mat = materialFlota({ fisico: !new URLSearchParams(location.search).has('simple') });
 const geoAuto = geometriaRueda();
@@ -121,3 +152,6 @@ window.foto = async (n) => {
   const d = canvas.toDataURL('image/jpeg', 0.88);
   return fetch('http://localhost:8199/?n=' + n, { method: 'POST', body: d }).then(r => r.text());
 };
+window.LISTO = true;
+}
+

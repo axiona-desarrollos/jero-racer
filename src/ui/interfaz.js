@@ -23,6 +23,11 @@ export class Interfaz {
       rpm: $('#hRpm'), marcha: $('#hMarcha'), combo: $('#hCombo'), comboN: $('#hComboN'), comboT: $('#hComboT'),
       avisos: $('#avisos'), mRecord: $('#mRecord'), mAyuda: $('#mAyuda'),
       oSonido: $('#oSonido'), oVoz: $('#oVoz'), oDireccion: $('#oDireccion'), oCamara: $('#oCamara'),
+      oCarro: $('#oCarro'), oPintura: $('#oPintura'), oLinea: $('#oLinea'),
+      linea: $('#linea'), sApodo: $('#sApodo'), sCodigo: $('#sCodigo'),
+      sEstado: $('#sEstado'), sLista: $('#sLista'), sAyuda: $('#sAyuda'),
+      bEntrarSala: $('#bEntrarSala'),
+      hSala: $('#hSala'), hSalaCod: $('#hSalaCod'), hSalaJ: $('#hSalaJ'),
       bSonido: $('#bSonido'),
       persecucion: $('#hPersecucion'), danio: $('#hDanio'), danioB: $('#hDanioB'),
       persSub: $('#hPersecucion small'),
@@ -46,7 +51,20 @@ export class Interfaz {
     enlazar('#oVoz', 'voz');
     enlazar('#oDireccion', 'direccion');
     enlazar('#oCamara', 'camara');
+    enlazar('#oCarro', 'carro');
+    enlazar('#oPintura', 'pintura');
     enlazar('#oInstalar', 'instalar');
+    enlazar('#oLinea', 'linea');
+    enlazar('#bEntrarSala', 'entrarSala');
+    enlazar('#bSalirSala', 'salirSala');
+    enlazar('#bCodigoNuevo', 'codigoNuevo');
+    enlazar('#bCompartirSala', 'invitar');
+    enlazar('#bCerrarLinea', 'cerrarLinea');
+    // El codigo se escribe siempre en mayusculas y sin signos.
+    this.n.sCodigo?.addEventListener('input', () => {
+      const i = this.n.sCodigo;
+      i.value = i.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+    });
   }
 
   // ----------------------------------------------------------- arranque
@@ -57,7 +75,7 @@ export class Interfaz {
   ocultarCarga() { this.n.boot.hidden = true; }
 
   // ---------------------------------------------------------------- menu
-  mostrarMenu({ recordPuntos, recordKm, movil, modoDireccion, sonido, voz, camara }) {
+  mostrarMenu({ recordPuntos, recordKm, movil, modoDireccion, sonido, voz, camara, carro, pintura, pintable, linea }) {
     this.n.menu.hidden = false;
     this.n.juego.hidden = true;
     this.n.mRecord.innerHTML = recordPuntos > 0
@@ -69,10 +87,14 @@ export class Interfaz {
         : '<b>◀ ▶</b> para girar, <b>GAS</b> y <b>FRENO</b> a la derecha, <b>F. MANO</b> para derrapar. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía. Ojo con las <b>fotomultas</b>.')
       : '<b>W / ↑</b> acelerar · <b>S / ↓</b> frenar · <b>A D / ← →</b> girar · <b>ESPACIO</b> freno de mano · <b>C</b> cámara · <b>ESC</b> pausa · <b>M</b> sonido. Pasa rozando los carros para sumar <b>combos</b>. Por encima de <b>170 km/h</b> te persigue la Policía; baja de 170 para que te dejen. Ojo con las <b>fotomultas</b>: a 50 y 70 km/h ya te cogen. También con control de consola.';
     this.n.oDireccion.hidden = !movil;
-    this.opciones({ modoDireccion, sonido, voz, camara });
+    this.opciones({ modoDireccion, sonido, voz, camara, carro, pintura, pintable, linea });
   }
 
-  opciones({ modoDireccion, sonido, voz, camara }) {
+  opciones({ modoDireccion, sonido, voz, camara, carro, pintura, pintable, linea }) {
+    if (linea != null) this.n.oLinea.querySelector('span').textContent = linea;
+    if (carro) this.n.oCarro.querySelector('span').textContent = carro;
+    if (pintura) this.n.oPintura.querySelector('span').textContent = pintura;
+    if (pintable != null) this.n.oPintura.hidden = !pintable;
     if (voz != null) this.n.oVoz.querySelector('span').textContent = voz ? 'SÍ' : 'NO';
     if (sonido != null) {
       this.n.oSonido.querySelector('span').textContent = sonido ? 'SÍ' : 'NO';
@@ -83,6 +105,68 @@ export class Interfaz {
   }
 
   ocultarMenu() { this.n.menu.hidden = true; }
+
+  // -------------------------------------------------------------- en línea
+  mostrarLinea(si, { apodo, codigo, nube } = {}) {
+    this.n.linea.hidden = !si;
+    if (!si) return;
+    if (apodo != null) this.n.sApodo.value = apodo;
+    if (codigo != null) this.n.sCodigo.value = codigo;
+    this.n.sAyuda.innerHTML = nube
+      ? 'El código <b>es</b> la sala: quien lo escriba entra contigo. Dáselo por WhatsApp.'
+      : 'Sin servidor configurado: por ahora la sala solo conecta <b>pestañas de este mismo navegador</b>. Abre otra pestaña con el mismo código para probar.';
+  }
+
+  /** @param {'fuera'|'entrando'|'dentro'|'error'} estado */
+  salaEstado(estado, texto) {
+    this.n.sEstado.textContent = texto ?? '';
+    this.n.sEstado.classList.toggle('ok', estado === 'dentro');
+    this.n.bEntrarSala.textContent = estado === 'dentro' ? 'SEGUIR JUGANDO' : estado === 'entrando' ? 'ENTRANDO…' : 'ENTRAR A LA SALA';
+    this.n.bEntrarSala.disabled = estado === 'entrando';
+  }
+
+  /** Lista de la pantalla de sala. */
+  salaLista(tabla) {
+    const n = this.n.sLista;
+    n.innerHTML = '';
+    if (!tabla.length) { n.innerHTML = '<div class="vacio">Nadie más por ahora.</div>'; return; }
+    for (const j of tabla) {
+      const d = document.createElement('div');
+      d.className = 'j';
+      d.innerHTML = `<i style="background:#${(j.color ?? 0xffffff).toString(16).padStart(6, '0')}"></i>`;
+      const s = document.createElement('span');
+      s.textContent = j.apodo + (j.yo ? ' (tú)' : '');
+      d.appendChild(s);
+      n.appendChild(d);
+    }
+  }
+
+  /** Marcador compacto de la sala durante la partida. */
+  salaHud(codigo, tabla) {
+    const n = this.n.hSala;
+    if (!codigo) { n.hidden = true; return; }
+    n.hidden = false;
+    this.#texto('hSalaCod', codigo);
+    const clave = tabla.map(j => `${j.apodo}:${j.puntos}`).join('|');
+    if (clave === this._ultSala) return;
+    this._ultSala = clave;
+    const caja = this.n.hSalaJ;
+    caja.innerHTML = '';
+    for (const j of tabla.slice(0, 5)) {
+      const d = document.createElement('div');
+      d.className = 'j' + (j.yo ? ' yo' : '');
+      d.innerHTML = `<i style="background:#${(j.color ?? 0xffffff).toString(16).padStart(6, '0')}"></i>`;
+      const s = document.createElement('span');
+      s.textContent = j.apodo;
+      const b = document.createElement('b');
+      b.textContent = fmt(j.puntos);
+      d.append(s, b);
+      caja.appendChild(d);
+    }
+  }
+
+  get apodo() { return this.n.sApodo.value.trim(); }
+  get codigo() { return this.n.sCodigo.value.trim(); }
 
   // ------------------------------------------------------------- juego
   mostrarJuego(si) { this.n.juego.hidden = !si; }

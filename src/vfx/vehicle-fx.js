@@ -71,14 +71,13 @@ export class VehicleFX {
     // esta groundOffset por encima. Un punto a "y" del modelo esta a
     // y + groundOffset en chasis. La matricula esta a y=0.315 del modelo, o
     // sea 0.474 de chasis: los escapes van justo debajo.
-    const zCola = -1.98;
-    const yEscape = 0.30 + vehicle.groundOffset;
-    this.escapes = [
-      new THREE.Vector3(-0.40, yEscape, zCola),
-      new THREE.Vector3(-0.22, yEscape, zCola),
-      new THREE.Vector3(0.22, yEscape, zCola),
-      new THREE.Vector3(0.40, yEscape, zCola),
-    ];
+    // El carro del jugador puede traer sus propias salidas modeladas
+    // (vehicle.opts.escapes), en cuyo caso la llama sale por donde se ve.
+    const propias = vehicle.opts?.escapes;
+    const zCola = propias ? propias.z : -1.98;
+    const yEscape = (propias ? propias.y : 0.30) + vehicle.groundOffset;
+    const xs = propias ? propias.x : [-0.40, -0.22, 0.22, 0.40];
+    this.escapes = xs.map(x => new THREE.Vector3(x, yEscape, zCola));
     this.ultimaLlamarada = 0;
   }
 

@@ -59,6 +59,7 @@ export class Vehicle {
     this.world = world;
     this.model = gltfScene;
 
+    this.opts = opts;
     this.mass = opts.mass ?? 1780.0;
     this.maxSteerAngle = opts.maxSteerAngle ?? THREE.MathUtils.degToRad(38);
     this.spawn = (opts.spawn ?? new THREE.Vector3(0, 0.06, 0)).clone();
@@ -139,8 +140,12 @@ export class Vehicle {
     // La caja tiene que quedar POR ENCIMA del punto de contacto del neumatico
     // (y=0 en espacio de chasis). Si roza el suelo el coche arrastra la panza
     // y las ruedas no pueden empujarlo: aceleraba a 0,04 m/s.
-    const hx = 0.90, hy = 0.40, hz = this.dims.length * 0.45;
-    const cy = 0.74;
+    // Cada carro trae su caja (ver catalogo.js). Por defecto, la del
+    // CarConcept, que es con la que se afino todo el comportamiento.
+    const ch = this.opts.chasis ?? {};
+    const hx = ch.hx ?? 0.90, hy = ch.hy ?? 0.40;
+    const hz = ch.hz ?? this.dims.length * 0.45;
+    const cy = ch.cy ?? 0.74;
 
     // La masa se fija por DENSIDAD. setAdditionalMassProperties es un no-op
     // silencioso en rapier3d-compat 0.20 — verificado: deja la masa en 0 sobre

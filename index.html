@@ -186,6 +186,31 @@
   .stats .multas{grid-column:1/-1} .stats .multas b{color:#ffe14d}
 
   /* ---------------- controles tactiles */
+  /* ---- sala en linea ---- */
+  .salaHud{position:fixed;left:calc(16px + var(--sa-l));top:calc(76px + var(--sa-t));z-index:8;
+    background:var(--panel);border:1px solid var(--borde);border-radius:14px;padding:8px 10px;min-width:176px;
+    backdrop-filter:blur(8px);font-size:13px;font-weight:700;letter-spacing:.5px}
+  .salaHud .cab{font-size:11px;letter-spacing:2px;color:var(--dim);margin-bottom:5px}
+  .salaHud .cab b{color:var(--neon);letter-spacing:3px}
+  .salaHud .j{display:flex;align-items:center;gap:6px;line-height:1.5}
+  .salaHud .j i{width:8px;height:8px;border-radius:50%;flex:none;font-style:normal}
+  .salaHud .j span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+  .salaHud .j b{color:var(--dim);font-variant-numeric:tabular-nums}
+  .salaHud .j.yo span,.salaHud .j.yo b{color:var(--neon)}
+  .campo{display:flex;flex-direction:column;gap:5px;text-align:left}
+  .campo label{font-size:12px;letter-spacing:2px;color:var(--dim);font-weight:700}
+  .campo input{font-family:var(--texto);font-size:19px;font-weight:700;letter-spacing:3px;color:var(--ink);
+    background:rgba(255,255,255,.05);border:1px solid var(--borde);border-radius:12px;padding:11px 13px;outline:none}
+  .campo input:focus{border-color:var(--neon)}
+  .campo input::placeholder{color:rgba(154,166,178,.5);letter-spacing:2px}
+  .salaLista{display:flex;flex-direction:column;gap:4px;font-size:14px;font-weight:700;text-align:left;
+    background:rgba(255,255,255,.04);border:1px solid rgba(120,175,215,.14);border-radius:12px;padding:9px 11px;min-height:44px}
+  .salaLista .j{display:flex;align-items:center;gap:7px}
+  .salaLista .j i{width:9px;height:9px;border-radius:50%;flex:none}
+  .salaLista .j span{flex:1;color:var(--ink)}
+  .salaLista .vacio{color:var(--dim);font-weight:600;font-size:13px}
+  .salaEstado{font-size:13.5px;font-weight:700;color:var(--ambar);min-height:1.2em;letter-spacing:.5px}
+  .salaEstado.ok{color:var(--neon)}
   .tactil{position:fixed;inset:0;pointer-events:none;z-index:9}
   .t-boton{position:absolute;pointer-events:auto;touch-action:none;display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:4px;background:rgba(10,16,26,.42);border:2px solid rgba(232,238,248,.28);border-radius:22px;
@@ -261,6 +286,7 @@
       <div class="danio" id="hDanio" hidden><span>DAÑO</span><div class="barraD"><i id="hDanioB"></i></div></div>
     </div>
   </div>
+  <div class="salaHud" id="hSala" hidden><div class="cab">SALA <b id="hSalaCod">----</b></div><div id="hSalaJ"></div></div>
   <div class="persecucion" id="hPersecucion" hidden><span>🚨 PERSECUCIÓN</span><b>PUNTOS ×1.5</b>
     <small>Baje de 170 km/h para que lo dejen</small></div>
   <div class="combo" id="hCombo">COMBO x<span id="hComboN">1</span><i class="t" id="hComboT"></i></div>
@@ -279,6 +305,9 @@
     <button class="bPrincipal" id="bJugar">JUGAR</button>
     <div class="ayuda" id="mAyuda"></div>
     <div class="opciones">
+      <button class="op" id="oLinea">EN LÍNEA: <span>NO</span></button>
+      <button class="op" id="oCarro">CARRO: <span>CONCEPT</span></button>
+      <button class="op" id="oPintura">PINTURA: <span>ROJO BRASA</span></button>
       <button class="op" id="oSonido">SONIDO: <span>SÍ</span></button>
       <button class="op" id="oVoz">VOZ: <span>SÍ</span></button>
       <button class="op" id="oDireccion" hidden>DIRECCIÓN: <span>INCLINAR</span></button>
@@ -293,7 +322,22 @@
     </div>
     <div class="girar">↻ Gira el teléfono en horizontal para jugar mejor</div>
     <div class="pie">Un juego de <a href="https://axionasoft.com" target="_blank" rel="noopener">Axiona Desarrollos Inteligentes</a> · Sabaneta, Colombia<br>
-      Deportivo: «Car Concept», Khronos Group (CC BY 4.0) · Tráfico y escenario modelados por Axiona</div>
+      «Car Concept», Khronos Group (CC BY 4.0) · FURIA GT, tráfico y escenario modelados por Axiona</div>
+  </div>
+</div>
+
+<div id="linea" class="pantalla" hidden>
+  <div class="caja">
+    <h2>EN LÍNEA</h2>
+    <div class="detalle">Corran en la misma autopista. Pasar rozando a un amigo también suma combo.</div>
+    <div class="campo"><label>TU APODO</label><input id="sApodo" maxlength="14" placeholder="JERO" autocomplete="off" spellcheck="false"></div>
+    <div class="campo"><label>CÓDIGO DE LA SALA</label><input id="sCodigo" maxlength="6" placeholder="ABCD" autocomplete="off" spellcheck="false"></div>
+    <div class="salaEstado" id="sEstado"></div>
+    <div class="salaLista" id="sLista"><div class="vacio">Nadie más por ahora.</div></div>
+    <button class="bPrincipal" id="bEntrarSala">ENTRAR A LA SALA</button>
+    <div class="fila"><button class="bSecundario" id="bCodigoNuevo">OTRO CÓDIGO</button><button class="bSecundario" id="bCompartirSala">INVITAR</button><button class="bSecundario" id="bSalirSala">SALIR</button></div>
+    <button class="bSecundario" id="bCerrarLinea">VOLVER AL MENÚ</button>
+    <div class="pie" id="sAyuda">El código es la sala: quien lo escriba entra contigo.</div>
   </div>
 </div>
 

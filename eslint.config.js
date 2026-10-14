@@ -12,7 +12,8 @@ export default [
         __dirname:'readonly', URLSearchParams:'readonly', location:'readonly',
         setTimeout:'readonly', clearTimeout:'readonly', setInterval:'readonly',
         clearInterval:'readonly', KeyboardEvent:'readonly', Event:'readonly', localStorage:'readonly',
-        screen:'readonly', removeEventListener:'readonly', DeviceOrientationEvent:'readonly', matchMedia:'readonly' },
+        screen:'readonly', removeEventListener:'readonly', DeviceOrientationEvent:'readonly', matchMedia:'readonly',
+        crypto:'readonly', BroadcastChannel:'readonly', CustomEvent:'readonly', URL:'readonly', sessionStorage:'readonly' },
     },
     rules: {
       'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],

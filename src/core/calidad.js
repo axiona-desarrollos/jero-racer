@@ -18,7 +18,7 @@
 
 export const NIVELES = Object.freeze({
   alta: {
-    nombre: 'alta', pixelMax: 2, pixelMin: 1, sombraMapa: 2048, sombraSuave: true,
+    nombre: 'alta', pixelMax: 2, pixelMin: 1, sombraMapa: 4096, sombraSuave: true,
     pinturaLaca: true, firme: 2048, transmision: true, arbolesPorTramo: 46,
   },
   // En movil la densidad de pixel manda en la nitidez mas que cualquier otra

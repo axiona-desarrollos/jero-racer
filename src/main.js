@@ -15,13 +15,12 @@
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 import { SteeringModel, PedalModel } from './vehicle/steering.js';
 import { Powertrain } from './vehicle/powertrain.js';
 import { Vehicle } from './vehicle/vehicle.js';
+import { cargarCarro, CARROS, fichaCarro, PINTURAS, CARRO_POR_DEFECTO } from './vehicle/catalogo.js';
 import { buildRoundabout, buildLighting, GEO } from './world/roundabout.js';
 import {
   CiudadFotorrealista, construirCalzadaOSM, radioEjeOSM,
@@ -35,7 +34,6 @@ import { Trafico } from './traffic/trafico.js';
 import { Persecucion, PERSECUCION } from './game/persecucion.js';
 import { FRASES, una } from './ui/frases.js';
 import { Carrera, ESTADO, VENTANA_COMBO } from './game/carrera.js';
-import { afinarTexturas } from './core/texturas.js';
 import { DirectorCamara } from './camera/director.js';
 import { modosPorDefecto } from './camera/modos.js';
 import { FixedLoop } from './core/loop.js';
@@ -48,6 +46,9 @@ import { EngineAudio } from './audio/engine.js';
 import { Narrador } from './audio/narrador.js';
 import { VehicleFX } from './vfx/vehicle-fx.js';
 import { ParticleSystem } from './vfx/particles.js';
+import { Postproceso } from './vfx/postproceso.js';
+import { Sala, codigoNuevo, normalizarCodigo, HAY_NUBE } from './net/sala.js';
+import { Remotos } from './net/remotos.js';
 
 const STEP = 1 / 60;
 const PARAMS = new URLSearchParams(location.search);
@@ -118,13 +119,17 @@ function resize() {
   renderer.setSize(ancho, alto, false);
   camera.aspect = ancho / alto;
   camera.updateProjectionMatrix();
+  post?.redimensionar(ancho, alto, Math.min(devicePixelRatio, pixelRatio));
 }
 addEventListener('resize', resize);
 
 // ------------------------------------------------------------ preferencias
 const PREFS_CLAVE = 'jr.prefs';
 const prefs = (() => {
-  const base = { sonido: true, voz: true, direccion: 'inclinar', camara: 'persecucion' };
+  const base = {
+    sonido: true, voz: true, direccion: 'inclinar', camara: 'persecucion',
+    carro: CARRO_POR_DEFECTO, pintura: 0, apodo: '',
+  };
   try { return { ...base, ...JSON.parse(localStorage.getItem(PREFS_CLAVE) ?? '{}') }; } catch { return base; }
 })();
 function guardarPrefs() { try { localStorage.setItem(PREFS_CLAVE, JSON.stringify(prefs)); } catch { /* privado */ } }
@@ -146,7 +151,16 @@ function marcaDe(id = '') {
   return /Jero/.test(id) ? 'Jero' : /Takamura/.test(id) ? 'Takamura' : /Axiona/.test(id) ? 'Axiona' : null;
 }
 
-let vehicle, loop, hud, sun, fx, director, ciudad = null, tactil = null, escala = null;
+let vehicle, loop, hud, sun, fx, director, ciudad = null, tactil = null, escala = null, post = null;
+/** El carro elegido, ya construido o descargado (ver vehicle/catalogo.js). */
+let carro = null;
+/** Sala en linea, si el jugador entro a una. */
+let sala = null;
+let remotos = null;
+/** Segundos desde que arranco el juego: reloj de los rozones entre jugadores. */
+let tReloj = 0;
+/** Caja en planta del carro para la prueba de choque contra el trafico. */
+let cajaJugador = { largo: 4.45, ancho: 1.95 };
 let autopista = null, paisaje = null, trafico = null, carrera = null, persecucion = null, fotomultas = null;
 /** Posicion del paso anterior, para saber que camaras se cruzaron. */
 let zFoto = null;
@@ -241,39 +255,20 @@ async function main() {
     spawn = SPAWN.clone();
   }
 
-  boot('Descargando el deportivo…', 0.32);
-  const cargador = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-  // El de movil esta simplificado a 98.000 triangulos y con texturas de 1024.
-  const archivo = CAL.nombre === 'alta' ? 'CarConcept.glb' : 'CarConcept-movil.glb';
-  const gltf = await cargador.loadAsync(import.meta.env.BASE_URL + 'models/' + archivo, (e) => {
-    if (e.total) boot(`Descargando el deportivo… ${Math.round(e.loaded / e.total * 100)} %`, 0.32 + 0.58 * (e.loaded / e.total));
-  });
-  boot('Preparando el motor…', 0.93);
-  gltf.scene.traverse(o => {
-    if (!o.isMesh) return;
-    o.castShadow = true; o.receiveShadow = true;
-    // LA TRANSMISION OBLIGA A PINTAR LA ESCENA DOS VECES: three renderiza
-    // todo lo opaco a una textura para refractarlo a traves del cristal. En
-    // movil eso es medio presupuesto de fotograma por un parabrisas. Se
-    // sustituye por cristal transparente clasico, que a la vista es casi igual.
-    for (const m of [].concat(o.material)) {
-      if (!CAL.transmision && m.transmission > 0) {
-        m.transmission = 0;
-        m.transparent = true;
-        m.opacity = 0.32;
-        m.depthWrite = false;
-        m.needsUpdate = true;
-      }
-      if (CAL.nombre !== 'alta' && m.iridescence > 0) { m.iridescence = 0; m.needsUpdate = true; }
-    }
-  });
-  const afinadas = afinarTexturas(gltf.scene, renderer.capabilities.getMaxAnisotropy());
-  console.info('[coche] texturas afinadas:', afinadas, '· calidad', CAL.nombre);
-  scene.add(gltf.scene);
+  carro = await cargarCarro(prefs.carro, CAL, boot);
+  // El CarConcept llega con texturas sin afinar; el FURIA no tiene ninguna.
+  const afinadas = carro.afinar?.(renderer.capabilities.getMaxAnisotropy()) ?? 0;
+  console.info('[coche]', carro.nombre, '· texturas afinadas:', afinadas, '· calidad', CAL.nombre);
+  carro.pintar(prefs.pintura);
+  cajaJugador = carro.caja;
+  scene.add(carro.objeto);
 
-  vehicle = new Vehicle(RAPIER, world, gltf.scene, { spawn });
+  vehicle = new Vehicle(RAPIER, world, carro.objeto, { spawn, ...carro.opts });
   SPAWN.copy(spawn);
   fx = new VehicleFX(scene, vehicle);
+  // La plantilla se saca ANTES de que Vehicle desarme las ruedas para
+  // riguearlas: despues, el clon saldria sin ruedas.
+  if (carro.plantilla) remotos = new Remotos(scene, carro.plantilla, cajaJugador);
   // Humo negro de las patrullas estrelladas: mas espeso y alto que el de las
   // llantas, que salia dentro de la carroceria y la propia patrulla lo tapaba.
   humoNegro = new ParticleSystem(220, { size: 1.4, sizeGrow: 1.4, drag: 0.975, gravity: 1.0, opacity: 0.6, soft: 0.5 });
@@ -300,6 +295,10 @@ async function main() {
   vehicle.render(1);
   director.fijar(ctxCamara);
 
+  post = new Postproceso(renderer, scene, camera, CAL);
+  post.redimensionar(Math.max(1, innerWidth), Math.max(1, innerHeight), pixelRatio);
+  console.info('[postproceso]', post.activo ? CAL.nombre : 'apagado');
+
   loop = new FixedLoop({
     step: STEP, maxSteps: 6, maxFrame: 0.1,
     fixed: dt => { if (estado !== 'pausa') simular(dt); },
@@ -322,11 +321,19 @@ async function main() {
     vehicle, scene, camera, renderer, world, RAPIER, steering, engine, input, loop, audio, fx, ciudad,
     director, autopista, trafico, carrera, paisaje, tactil, CAL, persecucion,
     reiniciar, empezar, get estado() { return estado; }, get telemetria() { return tel; },
-    pintar: () => renderer.render(scene, camera),
+    get post() { return post; },
+    pintar: () => post.render(1 / 60, {}),
   };
 
   ui.ocultarCarga();
   irAlMenu();
+  // Invitacion por enlace: se abre la pantalla de sala con el codigo puesto.
+  const invitado = normalizarCodigo(PARAMS.get('sala') ?? '');
+  if (invitado.length >= 3) {
+    ui.ocultarMenu();
+    ui.mostrarLinea(true, { apodo: prefs.apodo || '', codigo: invitado, nube: HAY_NUBE });
+    refrescarSala();
+  }
   loop.start();
 }
 
@@ -389,6 +396,29 @@ function conectarInterfaz() {
     if (!prefs.voz) narrador.callar();
     ui.opciones({ voz: prefs.voz });
   };
+  // CAMBIAR DE CARRO RECARGA LA PAGINA, a proposito. El carro no es una malla
+  // que se cambia: tiene cuerpo rigido, controlador de vehiculo y cuatro
+  // suspensiones dentro del mundo de Rapier. Desmontar todo eso en caliente es
+  // una fuente de fugas por un boton que se toca una vez. Recargar cuesta
+  // menos de un segundo con el FURIA, que no descarga nada.
+  ui.on.carro = () => {
+    const i = CARROS.findIndex(c => c.id === prefs.carro);
+    prefs.carro = CARROS[(i + 1) % CARROS.length].id;
+    guardarPrefs();
+    ui.opciones({ carro: fichaCarro(prefs.carro).nombre });
+    location.reload();
+  };
+  ui.on.pintura = () => {
+    prefs.pintura = (prefs.pintura + 1) % PINTURAS.length;
+    guardarPrefs();
+    ui.opciones({ pintura: carro.pintar(prefs.pintura) });
+  };
+  ui.on.linea = () => abrirLinea();
+  ui.on.cerrarLinea = () => { ui.mostrarLinea(false); if (estado === 'menu') mostrarMenu(); };
+  ui.on.codigoNuevo = () => ui.mostrarLinea(true, { codigo: codigoNuevo(), nube: HAY_NUBE });
+  ui.on.entrarSala = () => entrarSala();
+  ui.on.salirSala = () => salirSala();
+  ui.on.invitar = () => invitarSala();
   ui.on.direccion = () => cambiarDireccion(prefs.direccion === 'inclinar' ? 'botones' : 'inclinar');
   ui.on.compartir = () => compartir();
   ui.on.instalar = () => {
@@ -415,6 +445,10 @@ function mostrarMenu() {
     modoDireccion: prefs.direccion,
     sonido: prefs.sonido, voz: prefs.voz,
     camara: etiquetaCamara(prefs.camara),
+    carro: fichaCarro(prefs.carro).nombre,
+    pintura: PINTURAS[prefs.pintura % PINTURAS.length].nombre,
+    pintable: fichaCarro(prefs.carro).pintable,
+    linea: sala?.dentro ? sala.codigo : 'NO',
   });
 }
 
@@ -587,9 +621,6 @@ async function montarMedellin(world) {
 }
 
 // ------------------------------------------------------------------ fisica
-// Caja del coche en planta para la prueba de choque: medidas del chasis de
-// CarConcept en espacio local del vehiculo.
-const CAJA_JUGADOR = Object.freeze({ largo: 4.45, ancho: 1.95 });
 
 function simular(dt) {
   const a = input.sample(dt);
@@ -674,7 +705,7 @@ function actualizarAutopista(dt, fwdKmh) {
   const enJuego = estado === 'juego' && carrera.estado === ESTADO.RODANDO;
   persecucion.actualizar(dt, {
     x: p.x, z: p.z, velocidad: Math.max(0, fwdKmh / 3.6), kmh: fwdKmh, yaw,
-    largo: CAJA_JUGADOR.largo, ancho: CAJA_JUGADOR.ancho,
+    largo: cajaJugador.largo, ancho: cajaJugador.ancho,
   }, trafico, enJuego);
   carrera.enPersecucion = persecucion.activa;
   for (const ev of persecucion.eventos) {
@@ -701,7 +732,7 @@ function actualizarAutopista(dt, fwdKmh) {
   if (estado !== 'juego') return;
 
   const choque = carrera.estado === ESTADO.RODANDO
-    ? trafico.choqueCon({ x: p.x, z: p.z, yaw, largo: CAJA_JUGADOR.largo, ancho: CAJA_JUGADOR.ancho })
+    ? trafico.choqueCon({ x: p.x, z: p.z, yaw, largo: cajaJugador.largo, ancho: cajaJugador.ancho })
     : null;
   for (const ev of trafico.eventos) if (ev.rozon) ev.bono = carrera.rozon(ev);
   const termino = carrera.actualizar(dt, p.z, choque, vehicle.speedKmh);
@@ -834,7 +865,9 @@ function presentar(alpha, dt) {
     fx.update(tel, dt);
     humoNegro.update(dt);
     audio.update(tel, dt);
+    lucesDelCarro(tel);
   }
+  tickLinea(dt);
 
   ctxCamara.cuerpo = vehicle.bodyRoot;
   ctxCamara.velocidadKmh = vehicle.speedKmh;
@@ -846,7 +879,11 @@ function presentar(alpha, dt) {
   sun.target.position.copy(b);
   sun.target.updateMatrixWorld();
 
-  renderer.render(scene, camera);
+  post.render(dt, {
+    kmh: tel ? tel.speed : 0,
+    derrape: tel ? tel.slip : 0,
+    persecucion: !!(persecucion?.activa && estado === 'juego'),
+  });
   if (tel && !$('#hud').hidden) hud.update(tel, dt, { fps: loop.fps, steps: loop.lastSteps, dropped: loop.dropped });
   if (carrera && (estado === 'juego' || estado === 'cuenta' || estado === 'fin') && tel) {
     ui.actualizar({
@@ -859,6 +896,108 @@ function presentar(alpha, dt) {
       multas: carrera.fotomultas,
     }, dt);
   }
+}
+
+// ------------------------------------------------------------- en línea
+function abrirLinea() {
+  ui.ocultarMenu();
+  ui.mostrarLinea(true, {
+    apodo: prefs.apodo || '',
+    codigo: sala?.codigo || codigoNuevo(),
+    nube: HAY_NUBE,
+  });
+  refrescarSala();
+}
+
+async function entrarSala() {
+  if (sala?.dentro) { ui.mostrarLinea(false); if (estado === 'menu') mostrarMenu(); return; }
+  const apodo = ui.apodo || 'JERO';
+  const codigo = normalizarCodigo(ui.codigo);
+  if (codigo.length < 3) { ui.salaEstado('fuera', 'El código necesita al menos 3 letras.'); return; }
+  prefs.apodo = apodo;
+  guardarPrefs();
+  sala?.salir();
+  sala = new Sala({ codigo, apodo, carro: prefs.carro });
+  sala.on.cambio = () => refrescarSala();
+  sala.on.aviso = (txt) => ui.aviso(txt.toUpperCase(), 'sala ' + sala.codigo, '', 1800);
+  await sala.entrar();
+  if (sala.estado === 'dentro') ui.aviso('ESTÁS EN LA SALA', sala.codigo, '', 1800);
+}
+
+function salirSala() {
+  sala?.salir();
+  sala = null;
+  refrescarSala();
+  if (estado === 'menu') mostrarMenu();
+}
+
+function refrescarSala() {
+  const e = sala?.estado ?? 'fuera';
+  const textos = {
+    fuera: HAY_NUBE ? '' : 'Sin servidor: por ahora solo entre pestañas de este navegador.',
+    entrando: 'Conectando con la sala…',
+    dentro: `En la sala ${sala?.codigo} · ${sala?.cuantos} ${sala?.cuantos === 1 ? 'jugador' : 'jugadores'}`,
+    error: 'No se pudo entrar: ' + (sala?.error ?? 'revisa la conexión'),
+  };
+  ui.salaEstado(e, textos[e]);
+  ui.salaLista(sala?.dentro ? sala.tabla() : []);
+}
+
+async function invitarSala() {
+  const codigo = normalizarCodigo(ui.codigo) || sala?.codigo;
+  if (!codigo) return;
+  const url = `${location.origin}${location.pathname}?sala=${codigo}`;
+  const texto = `Entra a mi sala de JERO RACER. Código: ${codigo}`;
+  try {
+    if (navigator.share) { await navigator.share({ title: 'JERO RACER', text: texto, url }); return; }
+    await navigator.clipboard.writeText(`${texto} ${url}`);
+    ui.salaEstado(sala?.estado ?? 'fuera', 'Enlace copiado: pégalo en WhatsApp.');
+  } catch { /* el usuario cancelo */ }
+}
+
+/** Anuncia donde voy, mueve a los demás y reparte los rozones entre jugadores. */
+function tickLinea(dt) {
+  if (!sala) return;
+  tReloj += dt;
+  const b = vehicle.bodyRoot;
+  const yaw = Math.atan2(2 * (b.quaternion.w * b.quaternion.y + b.quaternion.x * b.quaternion.z),
+    1 - 2 * (b.quaternion.y * b.quaternion.y + b.quaternion.z * b.quaternion.z));
+  sala.publicar({
+    x: b.position.x, y: b.position.y, z: b.position.z, yaw,
+    kmh: tel ? tel.speed : 0, freno: tel ? tel.brake > 0.06 || tel.handbrake : false,
+    puntos: carrera?.puntos ?? 0, km: carrera?.km ?? 0,
+    jugando: estado === 'juego',
+  }, dt);
+  sala.limpiar();
+
+  if (remotos) {
+    remotos.actualizar(sala, dt, { x: b.position.x, z: b.position.z, yaw, tiempo: tReloj });
+    for (const ev of remotos.eventos) {
+      if (estado !== 'juego' || carrera?.estado !== ESTADO.RODANDO) continue;
+      const bono = carrera.rozon({ hueco: ev.hueco, pesado: false });
+      if (!bono) continue;
+      audio.bono(bono.combo);
+      if (navigator.vibrate) navigator.vibrate(18);
+      ui.aviso('¡LE PASÓ RASPANDO!', `+${bono.bono} · ${ev.apodo}`, '', 1400);
+    }
+  }
+  ui.salaHud(sala.dentro ? sala.codigo : null, sala.tabla());
+}
+
+/**
+ * Pilotos, direccionales y reversa del coche del jugador.
+ * Las estacionarias se prenden al terminar la partida: es lo que hace
+ * cualquiera tras un totazo, y remata bien el plano del final.
+ */
+function lucesDelCarro(t) {
+  if (!carro) return;
+  const parpadeo = (performance.now() / 420 | 0) % 2;
+  const estacionarias = estado === 'fin' ? parpadeo : 0;
+  carro.luces({
+    freno: t.brake > 0.06 || t.handbrake ? 1 : 0,
+    reversa: t.gearNum < 0 ? 1 : 0,
+    izq: estacionarias, der: estacionarias,
+  });
 }
 
 /** Avisos, sonido y efectos de cada evento de la persecucion. */
