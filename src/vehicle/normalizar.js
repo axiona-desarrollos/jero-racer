@@ -434,8 +434,10 @@ export function encenderPilotos(materiales, intensidad) {
     }
     if (!m.emissive) continue;
     m.emissive.copy(m.userData.emisivoBase).lerp(ROJO_FRENO, intensidad);
-    // Mas de esto y el mapeo de tonos (ACES) lo lava a naranja.
-    m.emissiveIntensity = m.userData.intensidadBase + intensidad * 1.1;
+    // Poco y rojo oscuro A PROPOSITO: el mapeo de tonos (ACES) lava un rojo
+    // intenso a naranja. Se comparo en el Mustang y el M4: con +1,1 los
+    // pilotos salian salmon; con esto salen rojo freno.
+    m.emissiveIntensity = m.userData.intensidadBase + intensidad * 0.3;
     // Si el piloto es la mica (el Mustang: 18 % opaca), el brillo se ve a
     // traves de ella y casi no se nota. Encendida, la mica se vuelve solida,
     // que es como se ve un piloto de verdad al frenar.
@@ -444,4 +446,4 @@ export function encenderPilotos(materiales, intensidad) {
     }
   }
 }
-const ROJO_FRENO = new THREE.Color(1.0, 0.045, 0.02);
+const ROJO_FRENO = new THREE.Color(0.6, 0, 0);
