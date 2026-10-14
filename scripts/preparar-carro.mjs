@@ -56,7 +56,16 @@ const MANIFIESTO = join(SALIDA, 'carros.json');
 const ESCRITORIO = { densidad: 5000, error: 0.003, lado: 2048 };
 // El de movil: lo que aguanta un Android de gama media a 60 fps con la
 // pasada de sombras, que pinta el carro dos veces.
-const MOVIL = { densidad: 1000, error: 0.006, lado: 1024 };
+const MOVIL = { densidad: 1000, error: 0.006, lado: 1024, aligerar: true };
+
+// EN EL MOVIL SOBRA LO QUE NO SE VE. Mecanica de los bajos y del vano motor
+// que nadie mira desde la camara de persecucion: fuera. Los modelos de
+// Sketchfab que la traen la nombran en ingles; los que no la nombran se
+// quedan como estan.
+const MECANICA_OCULTA = /subframe|sway.?bar|tie.?rod|lowe?r.?arm|lowrarm|upper.?arm|half.?shaft|drive.?shaft|transmission|transfer.?case|fuel.?tank|steering.?box|heat.?shield|radiator|intercooler|engine.?bay|pedal|(?<![a-z])diff(?![a-z])|(?<![a-z])(spring|shock|strut|stut)(?![a-z])/i;
+// El interior se ve a traves del vidrio, de lejos y oscurecido: aguanta una
+// simplificacion que en la carroceria se notaria.
+const INTERIOR = { densidad: 300, error: 0.02 };
 
 const args = process.argv.slice(2);
 const FORZAR = args.includes('--forzar');
@@ -265,14 +274,15 @@ function contarTriangulos(doc) {
   return Math.round(n);
 }
 
-async function optimizar(fuente, salida, ficha, { densidad, error, lado }) {
+async function optimizar(fuente, salida, ficha, { densidad, error, lado, aligerar = false }) {
   const doc = await io.read(fuente);
   // gltf-transform avisa de cada UV fuera de [0,1] que no cuantiza: son
   // decenas de lineas por modelo que no piden hacer nada.
   doc.setLogger(new Logger(Logger.Verbosity.ERROR));
   const antes = contarTriangulos(doc);
+  if (aligerar) quitarMecanica(doc);
   await doc.transform(dedup(), prune({ keepLeaves: true }), weld());
-  simplificarDensas(doc, ficha, densidad, error);
+  simplificarDensas(doc, ficha, densidad, error, aligerar ? INTERIOR : null);
   await doc.transform(
     textureCompress({ encoder: sharp, targetFormat: 'webp', quality: 86, resize: [lado, lado] }),
     quantize(),
@@ -291,7 +301,7 @@ async function optimizar(fuente, salida, ficha, { densidad, error, lado }) {
  * un error maximo (relativo al tamaño de la malla): si con eso no llega, se
  * queda corto antes que deformar la pieza.
  */
-function simplificarDensas(doc, ficha, densidad, error) {
+function simplificarDensas(doc, ficha, densidad, error, interior = null) {
   const escena = doc.getRoot().listScenes()[0];
   const total = getBounds(escena);
   // El modelo viene en las unidades de su autor: se pasa a metros con el
@@ -308,10 +318,44 @@ function simplificarDensas(doc, ficha, densidad, error) {
     const area = Math.max(1e-4, 2 * (x * y + y * z + z * x));
     const prims = malla.listPrimitives().filter(p => p.getMode() === 4);
     const tris = prims.reduce((n, p) => n + (p.getIndices()?.getCount() ?? p.getAttribute('POSITION').getCount()) / 3, 0);
-    if (tris / area <= densidad) return;
-    const proporcion = Math.max(0.05, densidad * area / tris);
-    for (const p of prims) simplifyPrimitive(p, { simplifier: MeshoptSimplifier, ratio: proporcion, error });
+    const limite = interior && esInterior(b, total, eje) ? interior : { densidad, error };
+    if (tris / area <= limite.densidad) return;
+    const proporcion = Math.max(0.05, limite.densidad * area / tris);
+    for (const p of prims) simplifyPrimitive(p, { simplifier: MeshoptSimplifier, ratio: proporcion, error: limite.error });
   });
+}
+
+/**
+ * ¿La malla va dentro del habitaculo? Centro en el nucleo del coche (lejos de
+ * los costados y de las puntas, entre el piso y el techo) y sin ocupar el
+ * ancho entero: asientos, tablero, consola. La carroceria, los vidrios y las
+ * puertas tocan los costados y no entran.
+ */
+function esInterior(b, total, eje) {
+  const lado = eje === 2 ? 0 : 2;
+  const c = i => (b.min[i] + b.max[i]) / 2;
+  const t = i => total.max[i] - total.min[i];
+  const ct = i => (total.min[i] + total.max[i]) / 2;
+  const altura = (c(1) - total.min[1]) / t(1);
+  return Math.abs(c(lado) - ct(lado)) < 0.3 * t(lado) && Math.abs(c(eje) - ct(eje)) < 0.3 * t(eje)
+    && altura > 0.25 && altura < 0.85
+    && b.max[lado] - b.min[lado] < 0.75 * t(lado) && b.max[eje] - b.min[eje] < 0.5 * t(eje);
+}
+
+/** Quita del movil la mecanica que no se ve (ver MECANICA_OCULTA). */
+function quitarMecanica(doc) {
+  let n = 0;
+  for (const nodo of doc.getRoot().listNodes()) {
+    const malla = nodo.getMesh();
+    if (!malla) continue;
+    const nombres = [nodo.getName(), malla.getName(), ...malla.listPrimitives().map(p => p.getMaterial()?.getName() ?? '')];
+    // Por el nombre del nodo o de la malla, nunca por el material: un
+    // material "mechanical" lo comparten piezas que si se ven.
+    if (!MECANICA_OCULTA.test(nombres[0]) && !MECANICA_OCULTA.test(nombres[1])) continue;
+    nodo.setMesh(null);
+    n++;
+  }
+  if (n) console.log(`  movil: ${n} piezas de mecanica oculta fuera`);
 }
 
 function escribirLicencia(c) {
