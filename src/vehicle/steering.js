@@ -44,6 +44,30 @@ export const STEERING_DEFAULTS = Object.freeze({
   counterSteerAssist: 0.0,
 });
 
+/**
+ * Direccion para mandos ANALOGICOS: el telefono inclinado como volante, o el
+ * stick de un mando. No es del C++ (alli no hay telefono).
+ *
+ * POR QUE OTRA. Con los valores de arriba, pensados para una tecla que da 0 o
+ * 1, a 160 km/h el volante se quedaba al 57 % por la velocidad, luego se le
+ * aplicaba la curva (^1,4), y encima Vehicle topa el angulo de rueda por
+ * agarre (~4° a esa velocidad). Con el telefono inclinado 9° la rueda giraba
+ * 0,3°: el carro se movia 2,2 m de lado en un segundo y se sentia de
+ * direccion dura. El tope por agarre ya evita el trompo, asi que aqui se
+ * recorta menos por velocidad y se responde antes. Medido en simulacion con
+ * el Mustang a 160 km/h, un segundo inclinado:
+ *        4°  ->  0,8 m (correccion fina)    9° -> 4,5 m (mas de un carril)
+ *        6°  ->  2,0 m                     12° -> 7,0 m (el limite de agarre)
+ * sin pasar de 0,1° de derrape.
+ */
+export const DIRECCION_ANALOGICA = Object.freeze({
+  minAuthority: 0.55,
+  outputExpo: 0.30,
+  turnInRate: 3.5,
+  returnRate: 6.0,
+  counterSteerRate: 8.0,
+});
+
 export const PEDAL_DEFAULTS = Object.freeze({
   pressRate: 3.4,
   releaseRate: 7.5,

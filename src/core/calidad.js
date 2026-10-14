@@ -24,8 +24,11 @@ export const NIVELES = Object.freeze({
   // En movil la densidad de pixel manda en la nitidez mas que cualquier otra
   // cosa: a 1x en una pantalla de 3x todo se ve pixelado. Se pide 2x y la
   // escala dinamica baja si el telefono no llega, pero nunca de 1x.
+  // pixelMin 1,25 y no 1: en una pantalla de casi 3x, a 1x el juego se veia
+  // pixelado (los arboles y la baranda en escalera). Se prefieren unos
+  // fotogramas menos a esa imagen.
   media: {
-    nombre: 'media', pixelMax: 2, pixelMin: 1, sombraMapa: 1024, sombraSuave: false,
+    nombre: 'media', pixelMax: 2, pixelMin: 1.25, sombraMapa: 1024, sombraSuave: false,
     pinturaLaca: true, firme: 2048, transmision: false, arbolesPorTramo: 30,
   },
   baja: {

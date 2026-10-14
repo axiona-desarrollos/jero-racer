@@ -77,11 +77,14 @@ export class Vehicle {
     this._lastSteer = 0;
     this._lastDt = 1 / 60;
     this._prevSpin = [0, 0, 0, 0];
-    // Tope fisico: ni en 1a con el motor al corte la rueda gira mas que esto.
-    // 7500 rpm / (4.696 * 3.55) = 450 rpm de rueda = 47 rad/s. Con margen x2.
-    this.maxWheelRads = opts.maxWheelRads ?? 100;
-
     this.#measure();
+    // Tope fisico de la lectura de la rueda: descarta los picos absurdos de
+    // wheelRotation() (ver driveWheelRads). ANTES ERA 100 rad/s FIJOS, sacado
+    // de la 1a marcha, y con una rueda de 0,35 m eso son 125 km/h: de ahi para
+    // arriba el motor leia siempre lo mismo y la caja se quedaba pegada en 4a
+    // mientras el carro seguia acelerando. Ahora es la velocidad de la rueda a
+    // 470 km/h, que ningun carro alcanza, para el radio que tenga cada uno.
+    this.maxWheelRads = opts.maxWheelRads ?? 130 / this.wheelRadius;
     this.#buildBody();
     this.#buildWheels();
     this.#rigVisuals();
@@ -98,7 +101,10 @@ export class Vehicle {
       if (!node) throw new Error(`El modelo no tiene el nodo "${name}"`);
       const p = new THREE.Vector3();
       node.getWorldPosition(p);
-      const bb = new THREE.Box3().setFromObject(node);
+      // Medida exacta (vertice a vertice) para los carros descargados: una
+      // rueda girada sobre su eje infla la caja rapida hasta un 40 %, y el
+      // carro iria sobre zancos. El CarConcept se afino con la rapida.
+      const bb = new THREE.Box3().setFromObject(node, !!this.opts.medidaExacta);
 
       // CarConcept viene con las ruedas DELANTERAS giradas 30 grados de
       // fabrica: es una pose de render. El eje de las traseras es (1,0,0)
@@ -127,7 +133,7 @@ export class Vehicle {
     this.wheelRadius = this.hubs.reduce((a, h) => a + h.radius, 0) / this.hubs.length;
     this.groundOffset = -Math.min(...this.hubs.map(h => h.bottom));
 
-    const bb = new THREE.Box3().setFromObject(this.model);
+    const bb = new THREE.Box3().setFromObject(this.model, !!this.opts.medidaExacta);
     const size = bb.getSize(new THREE.Vector3());
     this.dims = { length: size.z, width: size.x, height: size.y };
     this.forwardSign = Math.sign(this.hubs[FL].pos.z) || 1;
@@ -197,6 +203,8 @@ export class Vehicle {
     }
 
     const c = this.controller;
+    // Cada carro puede traer su reparto de agarre (ver vehicle/carros.js).
+    const agarre = this.opts.agarre ?? {};
     for (let i = 0; i < 4; i++) {
       const rear = i >= RL;
       // MEDIDO, no copiado: la rigidez de Rapier va escalada por la masa del
@@ -216,7 +224,7 @@ export class Vehicle {
       // Asimetria deliberada, igual que HRVehicleWheels.cpp (1400 delante /
       // 1150 detras): el tren trasero agarra MENOS. Sin esto el coche subvira
       // siempre y no existe el sobreviraje al levantar el pie — ni el drift.
-      c.setWheelFrictionSlip(i, rear ? 1.55 : 1.95);
+      c.setWheelFrictionSlip(i, rear ? agarre.detras ?? 1.55 : agarre.delante ?? 1.95);
       c.setWheelSideFrictionStiffness(i, rear ? 0.72 : 1.0);
     }
   }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Powertrain, POWERTRAIN_DEFAULTS, sampleTorqueCurve } from '../src/vehicle/powertrain.js';
+import { Powertrain, POWERTRAIN_DEFAULTS, sampleTorqueCurve, cajaSeis } from '../src/vehicle/powertrain.js';
 
 const DT = 1 / 60;
 const CPP = resolve(__dirname, '../Source/HighwayRacer/Vehicle/HRVehiclePawn.cpp');
@@ -194,5 +194,46 @@ describe('Powertrain · robustez', () => {
     expect(p.gear).toBe(1);
     expect(p.rpm).toBe(760);
     expect(p.shiftTimer).toBe(0);
+  });
+});
+
+describe('cajaSeis · la caja del juego web', () => {
+  // A que velocidad corta cada marcha, para un radio de rueda.
+  const corte = (caja, r) => caja.gears.map(g =>
+    Math.round(POWERTRAIN_DEFAULTS.maxRPM * 2 * Math.PI / 60 / (g * caja.finalRatio) * r * 3.6));
+
+  it('son seis relaciones, cada una mas larga que la anterior', () => {
+    const c = cajaSeis({ radioRueda: 0.35, velocidadMaxKmh: 280 });
+    expect(c.gears).toHaveLength(6);
+    for (let i = 1; i < 6; i++) expect(c.gears[i]).toBeLessThan(c.gears[i - 1]);
+  });
+
+  it('la 6a corta justo a la velocidad maxima pedida', () => {
+    const c = cajaSeis({ radioRueda: 0.347, velocidadMaxKmh: 280 });
+    expect(corte(c, 0.347)[5]).toBeCloseTo(280, -1);
+  });
+
+  it('con ruedas distintas cambia a las mismas velocidades', () => {
+    // El Mustang (0,35 m) y el CONCEPT (0,52 m) no pueden tener una caja
+    // que en uno corte a 60 y en el otro a 90.
+    const a = corte(cajaSeis({ radioRueda: 0.347, velocidadMaxKmh: 260 }), 0.347);
+    const b = corte(cajaSeis({ radioRueda: 0.524, velocidadMaxKmh: 260 }), 0.524);
+    expect(a).toEqual(b);
+  });
+
+  it('acelerando, la automatica pasa por las seis marchas', () => {
+    const r = 0.347;
+    const p = new Powertrain(cajaSeis({ radioRueda: r, velocidadMaxKmh: 280 }));
+    const vistas = new Set();
+    for (let kmh = 0; kmh <= 280; kmh += 0.25) {
+      p.update(1, radsFor(kmh, r), DT);
+      vistas.add(p.gear);
+    }
+    expect([...vistas].sort()).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it('no toca la 10R80 del C++', () => {
+    cajaSeis({ radioRueda: 0.3, velocidadMaxKmh: 300 });
+    expect(POWERTRAIN_DEFAULTS.gears).toHaveLength(10);
   });
 });

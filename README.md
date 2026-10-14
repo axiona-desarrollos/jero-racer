@@ -37,6 +37,7 @@ También funciona con un control de consola (gatillos y palanca izquierda).
 ```bash
 npm install
 npm run models     # descarga el deportivo de Khronos y lo optimiza
+npm run carros     # baja y prepara los carros de Sketchfab (ver abajo)
 npm run dev        # http://localhost:8150
 ```
 
@@ -51,5 +52,20 @@ La escena fotorrealista de la Glorieta Pilsen (`?escena=pilsen`) necesita una cl
 
 - Código: [MIT](LICENSE) © Axiona Desarrollos Inteligentes S.A.S.
 - Deportivo: «Car Concept», Khronos Group, [CC BY 4.0](https://github.com/KhronosGroup/glTF-Sample-Assets). No se incluye en el repositorio: lo descarga `npm run models`.
+- Carros de Sketchfab, todos [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), simplificados y comprimidos para la web. No se incluyen en el repositorio: los prepara `npm run carros`.
+  - «Ford Mustang Shelby GT500» de [Jiaxing](https://sketchfab.com/saitoyang) — [modelo](https://sketchfab.com/3d-models/ford-mustang-shelby-gt500-0eaa7a16796540f29461ddae05ecdeb3)
+  - «Lamborghini Centenario LP-770 Interior SDC» de [SDC PERFORMANCE](https://sketchfab.com/3DRaptor) — [modelo](https://sketchfab.com/3d-models/lamborghini-centenario-lp-770-interior-sdc-d679af35b5694301a185c7454a700c73)
+  - «BMW M4 CSL 2023» de [Black Snow](https://sketchfab.com/BlackSnow02) — [modelo](https://sketchfab.com/3d-models/bmw-m4-csl-2023-26d05968e63b4fc28205cbb9abb0ea41)
+
+  Las marcas y diseños de los vehículos son de sus dueños, que no patrocinan ni avalan este juego.
+
+### Carros de Sketchfab
+
+Sketchfab no deja descargar sin cuenta. Dos formas:
+
+1. **Con token** (lo baja todo solo): copia tu API Token de [sketchfab.com/settings/password](https://sketchfab.com/settings/password) a un archivo `.env.modelos` con `SKETCHFAB_TOKEN=...` y corre `npm run carros`.
+2. **A mano**: en cada enlace de arriba, *Download 3D Model → glTF*, deja los `.zip` en `modelos/` sin descomprimir y corre `npm run carros`.
+
+El juego solo ofrece en el menú los carros que estén preparados en `public/models` al compilar (`models/carros.json`).
 - Trazado de la glorieta: © colaboradores de OpenStreetMap ([ODbL](https://www.openstreetmap.org/copyright)).
 - Motor 3D: [three.js](https://threejs.org) (MIT). Física: [Rapier](https://rapier.rs) (Apache 2.0).
