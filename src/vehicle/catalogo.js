@@ -159,6 +159,7 @@ async function cargarSketchfab(f, CAL, boot) {
       mass: f.masa,
       maxSteerAngle: THREE.MathUtils.degToRad(f.grados),
       agarre: f.agarre,
+      medidaExacta: true,
       // La caja del CarConcept, con la que se afino la fisica, escalada al
       // ancho y al largo de cada uno. La altura no se toca: subirla hace al
       // carro volcar en las curvas.

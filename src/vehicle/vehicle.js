@@ -98,7 +98,10 @@ export class Vehicle {
       if (!node) throw new Error(`El modelo no tiene el nodo "${name}"`);
       const p = new THREE.Vector3();
       node.getWorldPosition(p);
-      const bb = new THREE.Box3().setFromObject(node);
+      // Medida exacta (vertice a vertice) para los carros descargados: una
+      // rueda girada sobre su eje infla la caja rapida hasta un 40 %, y el
+      // carro iria sobre zancos. El CarConcept se afino con la rapida.
+      const bb = new THREE.Box3().setFromObject(node, !!this.opts.medidaExacta);
 
       // CarConcept viene con las ruedas DELANTERAS giradas 30 grados de
       // fabrica: es una pose de render. El eje de las traseras es (1,0,0)
@@ -127,7 +130,7 @@ export class Vehicle {
     this.wheelRadius = this.hubs.reduce((a, h) => a + h.radius, 0) / this.hubs.length;
     this.groundOffset = -Math.min(...this.hubs.map(h => h.bottom));
 
-    const bb = new THREE.Box3().setFromObject(this.model);
+    const bb = new THREE.Box3().setFromObject(this.model, !!this.opts.medidaExacta);
     const size = bb.getSize(new THREE.Vector3());
     this.dims = { length: size.z, width: size.x, height: size.y };
     this.forwardSign = Math.sign(this.hubs[FL].pos.z) || 1;

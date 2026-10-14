@@ -10,10 +10,11 @@
 
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { normalizarCarro } from '../src/vehicle/normalizar.js';
 
 /** Un carro de juguete a escala de centimetros, como exportan muchos. */
-function carroAnonimo({ pilotoCompartido = false } = {}) {
+function carroAnonimo({ pilotoCompartido = false, ejeJunto = false, giroDelante = 0 } = {}) {
   const raiz = new THREE.Group();
   raiz.scale.setScalar(100);   // el autor trabajo en centimetros
   const pintura = new THREE.MeshStandardMaterial({ color: 0x2255aa, name: 'Object_mat_0' });
@@ -31,8 +32,17 @@ function carroAnonimo({ pilotoCompartido = false } = {}) {
   malla(new THREE.BoxGeometry(0.019, 0.010, 0.046), pintura, 0, 0.0075, 0);
   // Ruedas: cilindros con el eje en X, radio 0.34 m.
   const rueda = new THREE.CylinderGeometry(0.0034, 0.0034, 0.0024, 24).rotateZ(Math.PI / 2);
-  for (const [x, z] of [[0.0082, 0.0145], [-0.0082, 0.0145], [0.0082, -0.0145], [-0.0082, -0.0145]]) {
-    malla(rueda, goma, x, 0.0034, z);
+  const ejes = [[0.0082, 0.0145], [-0.0082, 0.0145], [0.0082, -0.0145], [-0.0082, -0.0145]];
+  for (const [x, z] of ejeJunto ? ejes.slice(2) : ejes) {
+    const r = malla(rueda, goma, x, 0.0034, z);
+    if (z > 0) r.rotation.y = giroDelante;    // la pose de foto, con la direccion puesta
+  }
+  // Las dos delanteras en UNA malla, como las deja mas de un autor.
+  if (ejeJunto) {
+    const dos = mergeGeometries([
+      rueda.clone().translate(0.0082, 0, 0), rueda.clone().translate(-0.0082, 0, 0),
+    ]);
+    malla(dos, goma, 0, 0.0034, 0.0145);
   }
   // Pilotos traseros pequeños y rojos.
   const piloto = new THREE.BoxGeometry(0.004, 0.001, 0.0005);
@@ -66,6 +76,32 @@ describe('normalizarCarro', () => {
     for (const n of nombres) expect(carro.getObjectByName(n).children.length).toBe(1);
     // El buje queda a un radio del suelo.
     for (const r of medidas.ruedas) expect(r.y).toBeCloseTo(r.radio, 2);
+  });
+
+  it('separa las dos ruedas de un eje que venian en una sola malla', () => {
+    const { raiz } = carroAnonimo({ ejeJunto: true });
+    const { medidas, raiz: carro } = normalizarCarro(raiz, { id: 'x', largo: 4.8 });
+    expect(medidas.ruedas).toHaveLength(4);
+    const fl = carro.getObjectByName('WheelFrontL');
+    const fr = carro.getObjectByName('WheelFrontR');
+    expect(fl.children).toHaveLength(1);
+    expect(fr.children).toHaveLength(1);
+    // Cada mitad mide una rueda, no el eje entero.
+    const ancho = new THREE.Box3().setFromObject(fl, true).getSize(new THREE.Vector3()).x;
+    expect(ancho).toBeLessThan(0.4);
+  });
+
+  it('mide el giro de fabrica de las delanteras para que Vehicle lo deshaga', () => {
+    const { raiz } = carroAnonimo({ giroDelante: THREE.MathUtils.degToRad(15) });
+    const { medidas, raiz: carro } = normalizarCarro(raiz, { id: 'x', largo: 4.8 });
+    const fl = medidas.ruedas.find(r => r.nombre === 'WheelFrontL');
+    const rl = medidas.ruedas.find(r => r.nombre === 'WheelRearL');
+    expect(fl.giro).toBeCloseTo(15, 0);
+    expect(rl.giro).toBe(0);
+    // El nodo lleva ese giro: Vehicle lo lee de su cuaternion.
+    expect(carro.getObjectByName('WheelFrontL').rotation.y).toBeCloseTo(THREE.MathUtils.degToRad(15), 1);
+    // Girada, la rueda mide mas de largo que de alto; el radio sale del alto.
+    expect(fl.radio).toBeCloseTo(rl.radio, 2);
   });
 
   it('gira el modelo los cuartos de vuelta que diga la ficha', () => {

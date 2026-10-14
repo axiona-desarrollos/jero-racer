@@ -35,7 +35,6 @@
  * @property {number} giro       cuartos de vuelta en Y para mirar a +Z
  * @property {number} masa       kg
  * @property {number} grados     angulo maximo de direccion
- * @property {number} triangulos presupuesto de escritorio
  */
 
 export const CARROS = [
@@ -47,7 +46,7 @@ export const CARROS = [
     fuente: 'https://sketchfab.com/3d-models/ford-mustang-shelby-gt500-0eaa7a16796540f29461ddae05ecdeb3',
     uid: '0eaa7a16796540f29461ddae05ecdeb3',
     licencia: 'CC BY 4.0',
-    largo: 4.79, giro: 0, masa: 1830, grados: 36, triangulos: 150000,
+    largo: 4.79, giro: 0, masa: 1830, grados: 36,
     // Reparto de agarre: el muscle car es de trasera suelta.
     agarre: { delante: 1.95, detras: 1.52 },
   },
@@ -59,7 +58,7 @@ export const CARROS = [
     fuente: 'https://sketchfab.com/3d-models/lamborghini-centenario-lp-770-interior-sdc-d679af35b5694301a185c7454a700c73',
     uid: 'd679af35b5694301a185c7454a700c73',
     licencia: 'CC BY 4.0',
-    largo: 4.92, giro: 0, masa: 1570, grados: 34, triangulos: 150000,
+    largo: 4.92, giro: 0, masa: 1570, grados: 34,
     // Motor central y tracción total: agarra mucho más y subvira poco.
     agarre: { delante: 2.15, detras: 2.05 },
   },
@@ -71,7 +70,7 @@ export const CARROS = [
     fuente: 'https://sketchfab.com/3d-models/bmw-m4-csl-2023-26d05968e63b4fc28205cbb9abb0ea41',
     uid: '26d05968e63b4fc28205cbb9abb0ea41',
     licencia: 'CC BY 4.0',
-    largo: 4.80, giro: 0, masa: 1625, grados: 37, triangulos: 150000,
+    largo: 4.80, giro: 0, masa: 1625, grados: 37,
     agarre: { delante: 2.05, detras: 1.78 },
   },
 ];

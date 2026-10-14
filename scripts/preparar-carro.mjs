@@ -15,12 +15,19 @@
         del todo, "API Token". Sin token Sketchfab responde 401 a cualquiera.
 
    QUE SALE
-     public/models/<id>.glb        escritorio: hasta ficha.triangulos, 2048 px
-     public/models/<id>-movil.glb  telefono: simplificado, texturas de 1024
+     public/models/<id>.glb        escritorio: texturas de 2048
+     public/models/<id>-movil.glb  telefono: mas simplificado, texturas de 1024
      public/models/carros.json     los carros que el menu puede ofrecer
    Los originales se quedan en modelos/, que no se publica (pesan decenas de
    MB). Ni los .glb ni el manifiesto van al repositorio: dependen de que el
    modelo se haya bajado en ESTE equipo.
+
+   SE SIMPLIFICA LO DENSO, NO TODO. En estos modelos los triangulos se van en
+   las llantas y los neumaticos (el Mustang: 136.000 solo en gomas) y en el
+   motor. La carroceria tiene pocos y grandes, y simplificarla deja los
+   paneles ondulados: se probo y el M4 parecia abollado. Por eso se mide la
+   densidad de cada malla (triangulos por metro cuadrado de su caja) y solo se
+   recorta la que pasa del limite.
 
    QUE NO HACE: orientar, escalar ni separar las ruedas. Eso lo hace el juego
    al cargar (vehicle/normalizar.js), donde three lo resuelve con cajas
@@ -30,7 +37,7 @@
 
 import { NodeIO, Logger } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, prune, weld, simplify, quantize, meshopt, textureCompress } from '@gltf-transform/functions';
+import { dedup, prune, weld, simplifyPrimitive, getBounds, quantize, meshopt, textureCompress } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
@@ -44,9 +51,12 @@ const ORIGINALES = join(RAIZ, 'modelos');
 const SALIDA = join(RAIZ, 'public', 'models');
 const MANIFIESTO = join(SALIDA, 'carros.json');
 
+// Triangulos por m² de caja a partir de los cuales una malla se simplifica.
+// Un neumatico del Mustang trae 18.000/m²; su carroceria, 740.
+const ESCRITORIO = { densidad: 5000, error: 0.003, lado: 2048 };
 // El de movil: lo que aguanta un Android de gama media a 60 fps con la
 // pasada de sombras, que pinta el carro dos veces.
-const MOVIL = { triangulos: 70000, lado: 1024 };
+const MOVIL = { densidad: 1000, error: 0.006, lado: 1024 };
 
 const args = process.argv.slice(2);
 const FORZAR = args.includes('--forzar');
@@ -88,8 +98,8 @@ for (const c of lista) {
     }
     const fuente = await conseguir(c);
     console.log(`  original  ${fuente.replace(RAIZ + sep, '')}`);
-    const a = await optimizar(fuente, escritorio, { triangulos: c.triangulos, lado: 2048 });
-    const b = await optimizar(fuente, movil, MOVIL);
+    const a = await optimizar(fuente, escritorio, c, ESCRITORIO);
+    const b = await optimizar(fuente, movil, c, MOVIL);
     manifiesto.carros[c.id] = {
       escritorio: `${c.id}.glb`, movil: `${c.id}-movil.glb`,
       triangulos: [a.triangulos, b.triangulos], mb: [a.mb, b.mb],
@@ -255,27 +265,53 @@ function contarTriangulos(doc) {
   return Math.round(n);
 }
 
-async function optimizar(fuente, salida, { triangulos, lado }) {
+async function optimizar(fuente, salida, ficha, { densidad, error, lado }) {
   const doc = await io.read(fuente);
   // gltf-transform avisa de cada UV fuera de [0,1] que no cuantiza: son
   // decenas de lineas por modelo que no piden hacer nada.
   doc.setLogger(new Logger(Logger.Verbosity.ERROR));
   const antes = contarTriangulos(doc);
-  const pasos = [dedup(), prune({ keepLeaves: true }), weld()];
-  // El simplificador respeta un error maximo: si con eso no llega al
-  // presupuesto, se queda corto antes que deformar la carroceria.
-  const proporcion = Math.min(1, triangulos / Math.max(1, antes));
-  if (proporcion < 0.97) {
-    pasos.push(simplify({ simplifier: MeshoptSimplifier, ratio: proporcion, error: lado > 1024 ? 0.0012 : 0.003 }));
-  }
-  pasos.push(textureCompress({ encoder: sharp, targetFormat: 'webp', quality: 86, resize: [lado, lado] }));
-  pasos.push(quantize(), meshopt({ encoder: MeshoptEncoder, level: 'high' }));
-  await doc.transform(...pasos);
+  await doc.transform(dedup(), prune({ keepLeaves: true }), weld());
+  simplificarDensas(doc, ficha, densidad, error);
+  await doc.transform(
+    textureCompress({ encoder: sharp, targetFormat: 'webp', quality: 86, resize: [lado, lado] }),
+    quantize(),
+    meshopt({ encoder: MeshoptEncoder, level: 'high' }),
+  );
   await io.write(salida, doc);
   const despues = contarTriangulos(doc);
   const mb = +(statSync(salida).size / 1048576).toFixed(2);
   console.log(`  ${salida.split(sep).pop().padEnd(22)} ${String(antes).padStart(8)} -> ${String(despues).padStart(7)} triangulos · ${mb} MB`);
   return { triangulos: despues, mb };
+}
+
+/**
+ * Simplifica cada malla cuya densidad pase de `densidad` triangulos por m²
+ * de su caja, lo justo para quedar en ese limite. El simplificador respeta
+ * un error maximo (relativo al tamaño de la malla): si con eso no llega, se
+ * queda corto antes que deformar la pieza.
+ */
+function simplificarDensas(doc, ficha, densidad, error) {
+  const escena = doc.getRoot().listScenes()[0];
+  const total = getBounds(escena);
+  // El modelo viene en las unidades de su autor: se pasa a metros con el
+  // largo de la ficha, medido en el eje que sera el largo tras el giro.
+  const eje = (ficha.giro ?? 0) % 2 ? 0 : 2;
+  const k = ficha.largo / Math.max(1e-6, total.max[eje] - total.min[eje]);
+  const vistas = new Set();
+  escena.traverse(nodo => {
+    const malla = nodo.getMesh();
+    if (!malla || vistas.has(malla)) return;
+    vistas.add(malla);
+    const b = getBounds(nodo);
+    const [x, y, z] = [0, 1, 2].map(i => (b.max[i] - b.min[i]) * k);
+    const area = Math.max(1e-4, 2 * (x * y + y * z + z * x));
+    const prims = malla.listPrimitives().filter(p => p.getMode() === 4);
+    const tris = prims.reduce((n, p) => n + (p.getIndices()?.getCount() ?? p.getAttribute('POSITION').getCount()) / 3, 0);
+    if (tris / area <= densidad) return;
+    const proporcion = Math.max(0.05, densidad * area / tris);
+    for (const p of prims) simplifyPrimitive(p, { simplifier: MeshoptSimplifier, ratio: proporcion, error });
+  });
 }
 
 function escribirLicencia(c) {
