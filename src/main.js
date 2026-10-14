@@ -17,8 +17,8 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
-import { SteeringModel, PedalModel } from './vehicle/steering.js';
-import { Powertrain } from './vehicle/powertrain.js';
+import { SteeringModel, PedalModel, DIRECCION_ANALOGICA } from './vehicle/steering.js';
+import { Powertrain, cajaSeis } from './vehicle/powertrain.js';
 import { Vehicle } from './vehicle/vehicle.js';
 import { cargarCarro, descubrirCarros, CARROS, fichaCarro, PINTURAS } from './vehicle/catalogo.js';
 import { buildRoundabout, buildLighting, GEO } from './world/roundabout.js';
@@ -135,7 +135,12 @@ const prefs = (() => {
 function guardarPrefs() { try { localStorage.setItem(PREFS_CLAVE, JSON.stringify(prefs)); } catch { /* privado */ } }
 
 const input = new Input();
-const steering = new SteeringModel();
+const steeringTeclas = new SteeringModel();
+// El telefono inclinado y el stick del mando tienen su propia direccion (ver
+// DIRECCION_ANALOGICA). Se cambia de una a otra conservando el volante donde
+// estaba, para que no pegue un salto si se mezclan teclado y mando.
+const steeringAnalogico = new SteeringModel(DIRECCION_ANALOGICA);
+let steering = steeringTeclas;
 const throttleM = new PedalModel();
 const brakeM = new PedalModel();
 const engine = new Powertrain();
@@ -269,6 +274,11 @@ async function main() {
   scene.add(carro.objeto);
 
   vehicle = new Vehicle(RAPIER, world, carro.objeto, { spawn, ...carro.opts });
+  // Caja de seis cambios a la medida de la rueda de ESTE carro (el radio solo
+  // se conoce cuando Vehicle mide el modelo) y el par de su motor.
+  Object.assign(engine, cajaSeis({ radioRueda: vehicle.wheelRadius, velocidadMaxKmh: carro.velocidadMax ?? 255 }),
+    { maxTorque: carro.parMax ?? 700 });
+  engine.reset();
   SPAWN.copy(spawn);
   fx = new VehicleFX(scene, vehicle);
   // La plantilla se saca ANTES de que Vehicle desarme las ruedas para
@@ -323,7 +333,7 @@ async function main() {
   conectarInterfaz();
 
   window.HR = {
-    vehicle, scene, camera, renderer, world, RAPIER, steering, engine, input, loop, audio, fx, ciudad,
+    vehicle, scene, camera, renderer, world, RAPIER, get steering() { return steering; }, engine, input, loop, audio, fx, ciudad,
     director, autopista, trafico, carrera, paisaje, tactil, CAL, persecucion,
     reiniciar, empezar, get estado() { return estado; }, get telemetria() { return tel; },
     get post() { return post; },
@@ -643,6 +653,8 @@ function simular(dt) {
   else if (engine.gear < 0 && fwdKmh > -1.5 && a.throttle > 0.5) engine.engageForward(fwdKmh);
   if (engine.gear < 0) { acelerar = a.brake; frenar = a.throttle; }
 
+  const modelo = a.analog ? steeringAnalogico : steeringTeclas;
+  if (modelo !== steering) { modelo.current = steering.current; steering = modelo; }
   const steer = steering.update(a.steer, fwdKmh, slip, dt);
   const th = throttleM.update(acelerar, dt);
   const br = brakeM.update(frenar, dt);
@@ -1195,7 +1207,7 @@ function reubicarEnCarril() {
     if (Math.abs(x - p.x) < d) { d = Math.abs(x - p.x); mejor = x; }
   }
   vehicle.respawn(new THREE.Vector3(mejor, base.y, p.z + 2), 0);
-  steering.reset(); throttleM.reset(); brakeM.reset();
+  steeringTeclas.reset(); steeringAnalogico.reset(); throttleM.reset(); brakeM.reset();
   ui.aviso('DE VUELTA AL CARRIL', '', 'ambar');
 }
 
@@ -1220,7 +1232,7 @@ function reiniciar() {
   tiempoVolcado = 0;
   if (fx) fx.clear();
   humoNegro?.clear();
-  steering.reset();
+  steeringTeclas.reset(); steeringAnalogico.reset();
   throttleM.reset();
   brakeM.reset();
   engine.reset();

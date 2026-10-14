@@ -51,6 +51,36 @@ export const POWERTRAIN_DEFAULTS = Object.freeze({
   automatic: true,
 });
 
+/**
+ * Caja de SEIS cambios para el juego web, calculada para cada carro.
+ *
+ * POR QUE NO LA 10R80 DE ARRIBA. Esa es la del proyecto Unreal y se queda
+ * igual (tests/powertrain.test.js la compara con el C++). En la web daba un
+ * juego raro: diez relaciones tan juntas que a velocidad de autopista nunca
+ * pasaba de 4a, y sin resistencia del aire, la 10a llevaria el carro a mas de
+ * 600 km/h. Lo unico que lo frenaba era un tope en la lectura de la rueda que
+ * dejaba la caja pegada en 4a (ver Vehicle.maxWheelRads).
+ *
+ * LAS RELACIONES SALEN DE LA VELOCIDAD, NO AL REVES. Se fija la velocidad
+ * maxima del carro (en el corte de 6a) y se reparte en seis tramos de igual
+ * anchura: 1a llega al 25 % y cada marcha suma un 15 %. Asi las de arriba
+ * quedan mas juntas, como en una caja real, y las seis se usan. Como cuentan
+ * con el radio de la rueda, un Mustang de ruedas de 0,35 m y un CONCEPT de
+ * 0,52 m cambian a las mismas velocidades.
+ *
+ * @param {{radioRueda:number, velocidadMaxKmh:number, maxRPM?:number, finalRatio?:number}} o
+ * @returns {{gears:number[], reverseRatio:number, finalRatio:number}}
+ */
+export function cajaSeis({ radioRueda, velocidadMaxKmh, maxRPM = POWERTRAIN_DEFAULTS.maxRPM,
+  finalRatio = POWERTRAIN_DEFAULTS.finalRatio }) {
+  const motorRads = maxRPM * 2 * Math.PI / 60;
+  const gears = [0.25, 0.40, 0.55, 0.70, 0.85, 1.0].map(f => {
+    const ruedaRads = (velocidadMaxKmh * f / 3.6) / radioRueda;
+    return +(motorRads / ruedaRads / finalRatio).toFixed(4);
+  });
+  return { gears, reverseRatio: gears[0], finalRatio };
+}
+
 export class Powertrain {
   constructor(o = {}) {
     Object.assign(this, POWERTRAIN_DEFAULTS, o);
@@ -157,7 +187,7 @@ export class Powertrain {
     return false;
   }
 
-  /** Texto para el HUD: R · N · 1..10 */
+  /** Texto para el HUD: R · N · 1..6 (o 1..10 con la 10R80) */
   get gearLabel() { return this.gear < 0 ? 'R' : this.gear === 0 ? 'N' : String(this.gear); }
 
   get normalizedRPM() {

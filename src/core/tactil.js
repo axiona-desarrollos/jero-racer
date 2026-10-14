@@ -26,7 +26,9 @@ const GRAD = Math.PI / 180;
 
 /** Giro del telefono como volante, en grados. */
 export class Inclinacion {
-  constructor({ topeGrados = 24, zonaMuerta = 1.6 } = {}) {
+  // 22° de giro del telefono = volante a tope. Con 24 habia que torcer mucho
+  // las manos para hacer un cambio de carril a velocidad.
+  constructor({ topeGrados = 22, zonaMuerta = 1.6 } = {}) {
     this.tope = topeGrados;
     this.zonaMuerta = zonaMuerta;
     this.crudo = 0;          // grados sin calibrar

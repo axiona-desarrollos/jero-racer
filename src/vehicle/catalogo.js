@@ -72,6 +72,8 @@ export function fichaCarro(id) {
  * @property {{largo:number, ancho:number}} caja  para la prueba de choque
  * @property {(i:number)=>string} pintar  cambia la pintura (devuelve su nombre)
  * @property {(e:object)=>void} luces     freno, direccionales, reversa, faros
+ * @property {number} velocidadMax        km/h en el corte de 6a (powertrain.cajaSeis)
+ * @property {number} parMax              Nm del motor
  */
 
 /**
@@ -104,9 +106,21 @@ const cargador = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
  * transparente clasico, que a la vista es casi igual.
  */
 function prepararMallas(escena, CAL) {
+  escena.updateMatrixWorld(true);
+  const escala = new THREE.Vector3();
   escena.traverse(o => {
     if (!o.isMesh) return;
-    o.castShadow = true; o.receiveShadow = true;
+    o.receiveShadow = true;
+    // LA SOMBRA PINTA EL CARRO OTRA VEZ, ENTERO. En el movil, las piezas
+    // pequeñas (tornilleria, emblemas, botones del tablero) no se notan en
+    // la sombra y son buena parte de los triangulos: solo proyecta lo que
+    // mide mas de 35 cm.
+    if (CAL.nombre === 'alta') o.castShadow = true;
+    else {
+      if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+      o.getWorldScale(escala);
+      o.castShadow = o.geometry.boundingSphere.radius * Math.max(escala.x, escala.y, escala.z) > 0.35;
+    }
     for (const m of [].concat(o.material)) {
       if (!CAL.transmision && m.transmission > 0) {
         m.transmission = 0;
@@ -159,6 +173,7 @@ async function cargarSketchfab(f, CAL, boot) {
   return {
     id: f.id,
     nombre: f.nombre,
+    velocidadMax: f.velocidadMax, parMax: f.parMax,
     objeto: raiz,
     plantilla,
     afinar: (maxAniso) => afinarTexturas(raiz, maxAniso),
@@ -199,6 +214,7 @@ function cargarFuria(CAL, boot) {
   return {
     id: 'furia',
     nombre: FURIA.nombre,
+    velocidadMax: 255, parMax: 700,
     objeto,
     // Copia intacta para los carros de los demas jugadores (net/remotos.js).
     plantilla: objeto.clone(true),
@@ -235,6 +251,7 @@ async function cargarConcept(CAL, boot) {
   return {
     id: 'concept',
     nombre: 'CONCEPT',
+    velocidadMax: 255, parMax: 700,
     objeto: gltf.scene,
     plantilla: gltf.scene.clone(true),
     // Lo que afina texturas necesita la anisotropia del renderer: lo hace

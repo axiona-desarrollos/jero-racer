@@ -20,9 +20,17 @@
    TODO ESTO CUESTA RELLENO DE PANTALLA, que es justo lo que no sobra en un
    movil. Por eso la cadena se arma por niveles:
      alta  -> GTAO + resplandor + velocidad + grado, con MSAA x4
-     media -> resplandor pequeño + velocidad + grado
+     media -> NADA (telefonos), como baja
      baja  -> NADA: se pinta directo a la pantalla, como antes
-   Y `?post=0` en la URL la apaga entera para comparar.
+   Y `?post=0` en la URL la apaga entera para comparar; `?post=media` arma
+   la cadena ligera (resplandor + velocidad + grado) para probarla.
+
+   POR QUE LOS TELEFONOS VAN SIN NADA. Con la cadena ligera el juego se veia
+   pixelado en el celular y nitido en el PC, por dos cosas a la vez: al pintar
+   por la cadena se pierde el antialias del lienzo (y la media no lleva MSAA,
+   que en un movil cuesta demasiado), y el relleno extra bajaba los fps, asi
+   que la escala dinamica bajaba la densidad de pixel a 1x en una pantalla de
+   casi 3x. Pintando directo vuelve el antialias y la densidad se queda arriba.
 
    EL TONO SE APLICA AL FINAL, NO AL PRINCIPIO. Al pintar a un destino
    intermedio tres.js NO aplica tone mapping (solo lo hace contra el lienzo),
@@ -107,6 +115,7 @@ const ShaderVelocidad = {
 /** Ajustes de cada nivel. */
 const NIVELES = {
   alta: { ao: true, resplandor: 0.42, muestras: 4, umbral: 0.86 },
+  // Solo con ?post=media: por defecto los telefonos van sin cadena (arriba).
   media: { ao: false, resplandor: 0.30, muestras: 0, umbral: 0.90 },
   baja: null,
 };
@@ -124,7 +133,8 @@ export class Postproceso {
     this.camera = camera;
 
     const forzado = new URLSearchParams(location.search).get('post');
-    const nivel = forzado === '0' ? null : NIVELES[forzado && NIVELES[forzado] !== undefined ? forzado : CAL.nombre];
+    const porDefecto = CAL.nombre === 'alta' ? NIVELES.alta : null;
+    const nivel = forzado === '0' ? null : forzado && NIVELES[forzado] !== undefined ? NIVELES[forzado] : porDefecto;
     this.nivel = nivel;
     this.activo = !!nivel;
     this.vel = 0;

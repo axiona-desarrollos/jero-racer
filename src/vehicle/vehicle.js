@@ -77,11 +77,14 @@ export class Vehicle {
     this._lastSteer = 0;
     this._lastDt = 1 / 60;
     this._prevSpin = [0, 0, 0, 0];
-    // Tope fisico: ni en 1a con el motor al corte la rueda gira mas que esto.
-    // 7500 rpm / (4.696 * 3.55) = 450 rpm de rueda = 47 rad/s. Con margen x2.
-    this.maxWheelRads = opts.maxWheelRads ?? 100;
-
     this.#measure();
+    // Tope fisico de la lectura de la rueda: descarta los picos absurdos de
+    // wheelRotation() (ver driveWheelRads). ANTES ERA 100 rad/s FIJOS, sacado
+    // de la 1a marcha, y con una rueda de 0,35 m eso son 125 km/h: de ahi para
+    // arriba el motor leia siempre lo mismo y la caja se quedaba pegada en 4a
+    // mientras el carro seguia acelerando. Ahora es la velocidad de la rueda a
+    // 470 km/h, que ningun carro alcanza, para el radio que tenga cada uno.
+    this.maxWheelRads = opts.maxWheelRads ?? 130 / this.wheelRadius;
     this.#buildBody();
     this.#buildWheels();
     this.#rigVisuals();

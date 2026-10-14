@@ -37,10 +37,18 @@
  * @property {number} giro       cuartos de vuelta en Y para mirar a +Z
  * @property {number} masa       kg
  * @property {number} grados     angulo maximo de direccion
+ * @property {number} velocidadMax km/h en el corte de 6a (ver cajaSeis)
+ * @property {number} parMax     Nm del motor de verdad
  * @property {{delante:number, detras:number}} agarre  friccion de cada eje
  * @property {{x:number[], y:number, z:number}} escapes salidas del escape
  */
 
+// MOTOR Y CAJA. parMax es el par del motor real (GT500 5.2 con compresor
+// 847 Nm, M4 CSL 650 Nm; al Centenario, 690 Nm a 8600 rpm, se le da mas par
+// porque aqui todos cortan a 7500 y si no perderia su potencia de arriba).
+// velocidadMax es la del corte en 6a: con el rozamiento del juego cada uno se
+// queda un poco por debajo (medido en simulacion: 259, 267 y 240 km/h) y asi
+// la 6a se usa entera. Ver powertrain.cajaSeis.
 export const CARROS = [
   {
     id: 'mustang',
@@ -50,7 +58,7 @@ export const CARROS = [
     fuente: 'https://sketchfab.com/3d-models/ford-mustang-shelby-gt500-0eaa7a16796540f29461ddae05ecdeb3',
     uid: '0eaa7a16796540f29461ddae05ecdeb3',
     licencia: 'CC BY 4.0',
-    largo: 4.79, giro: 0, masa: 1830, grados: 36,
+    largo: 4.79, giro: 0, masa: 1830, grados: 36, velocidadMax: 280, parMax: 847,
     // Reparto de agarre: el muscle car es de trasera suelta.
     agarre: { delante: 1.95, detras: 1.52 },
     // Dos colas dobles, una en cada esquina del difusor.
@@ -64,7 +72,7 @@ export const CARROS = [
     fuente: 'https://sketchfab.com/3d-models/lamborghini-centenario-lp-770-interior-sdc-d679af35b5694301a185c7454a700c73',
     uid: 'd679af35b5694301a185c7454a700c73',
     licencia: 'CC BY 4.0',
-    largo: 4.92, giro: 0, masa: 1570, grados: 34,
+    largo: 4.92, giro: 0, masa: 1570, grados: 34, velocidadMax: 300, parMax: 780,
     // Motor central y tracción total: agarra mucho más y subvira poco.
     agarre: { delante: 2.15, detras: 2.05 },
     // Tres salidas en fila en el centro, como el de verdad.
@@ -78,7 +86,7 @@ export const CARROS = [
     fuente: 'https://sketchfab.com/3d-models/bmw-m4-csl-2023-26d05968e63b4fc28205cbb9abb0ea41',
     uid: '26d05968e63b4fc28205cbb9abb0ea41',
     licencia: 'CC BY 4.0',
-    largo: 4.80, giro: 0, masa: 1625, grados: 37,
+    largo: 4.80, giro: 0, masa: 1625, grados: 37, velocidadMax: 265, parMax: 650,
     agarre: { delante: 2.05, detras: 1.78 },
     // Cuatro salidas juntas en el centro del difusor, dos a cada lado.
     escapes: { x: [-0.33, -0.15, 0.15, 0.33], y: 0.34, z: -2.37 },

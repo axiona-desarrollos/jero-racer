@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  SteeringModel, PedalModel, STEERING_DEFAULTS, PEDAL_DEFAULTS,
+  SteeringModel, PedalModel, STEERING_DEFAULTS, PEDAL_DEFAULTS, DIRECCION_ANALOGICA,
   interpConstantTo, mappedRangeClamped,
 } from '../src/vehicle/steering.js';
 
@@ -206,5 +206,33 @@ describe('PedalModel', () => {
     expect(p.value).toBeLessThanOrEqual(1);
     for (let i = 0; i < 200; i++) p.update(-5, DT);
     expect(p.value).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('DIRECCION_ANALOGICA · el telefono como volante', () => {
+  /** Volante al que se llega sosteniendo una entrada medio segundo. */
+  const sostener = (m, raw, kmh) => {
+    let out = 0;
+    for (let i = 0; i < 30; i++) out = m.update(raw, kmh, 0, DT);
+    return out;
+  };
+
+  it('a 160 km/h la misma inclinacion gira bastante mas que con teclas', () => {
+    const teclas = sostener(new SteeringModel(), 0.4, 160);
+    const tel = sostener(new SteeringModel(DIRECCION_ANALOGICA), 0.4, 160);
+    // 0,207 contra 0,128: un 60 % mas de volante, y el tope de 22° del
+    // telefono (antes 24) suma el resto de lo medido en simulacion.
+    expect(tel).toBeGreaterThan(teclas * 1.5);
+  });
+
+  it('sigue recortando algo con la velocidad', () => {
+    const lento = sostener(new SteeringModel(DIRECCION_ANALOGICA), 0.6, 30);
+    const rapido = sostener(new SteeringModel(DIRECCION_ANALOGICA), 0.6, 240);
+    expect(rapido).toBeLessThan(lento);
+  });
+
+  it('no cambia la direccion de teclado, que es la del C++', () => {
+    expect(STEERING_DEFAULTS.minAuthority).toBe(0.26);
+    expect(STEERING_DEFAULTS.outputExpo).toBe(0.40);
   });
 });
