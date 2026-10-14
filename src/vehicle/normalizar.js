@@ -104,7 +104,13 @@ export function normalizarCarro(escena, ficha) {
  */
 function separarRuedas(raiz, tam) {
   const mallas = [];
-  raiz.traverse(o => { if (o.isMesh) mallas.push(o); });
+  raiz.traverse(o => {
+    if (o.isMesh) mallas.push(o);
+    // Si el autor ya llamo a un nodo como los que se van a crear, Vehicle
+    // encontraria primero el suyo (vacio tras mover las piezas) y la rueda
+    // no giraria. Se le cambia el nombre al original.
+    else if (/^Wheel(Front|Rear)[LR]$/.test(o.name)) o.name += '_original';
+  });
 
   const piezas = mallas.map(o => {
     const caja = cajaLocal(o, raiz);
@@ -207,24 +213,37 @@ const esquina = (g, tam) => Math.abs(g.centro.x) / tam.x + Math.abs(g.centro.z) 
  * Por nombre cuando lo hay, y si no por color: rojo dominante y en el tercio
  * de atras. Es una heuristica, y por eso devuelve lista: si se equivoca de
  * pieza se nota poco, y si acierta el coche frena como uno de verdad.
+ *
+ * LO QUE NUNCA PUEDE PASAR es encender un material que tambien usa la
+ * carroceria: muchos modelos de Sketchfab pintan medio coche con un solo
+ * material y un atlas de texturas, y al frenar se ponia rojo entero. Por eso
+ * un material solo cuenta si TODAS sus mallas son pequeñas y estan atras.
  */
 function buscarPilotos(raiz, tam) {
-  const out = [];
-  const vistos = new Set();
+  const usos = new Map();   // material -> {material, atras, pequeno, nombre}
   raiz.traverse(o => {
     if (!o.isMesh) return;
     const caja = cajaLocal(o, raiz);
     const c = caja.getCenter(new THREE.Vector3());
-    if (c.z > -tam.z * 0.26) return;
+    const s = caja.getSize(new THREE.Vector3());
+    const atras = c.z < -tam.z * 0.26;
+    const pequeno = s.x < tam.x * 0.6 && s.y < tam.y * 0.35 && s.z < tam.z * 0.2;
     for (const m of [].concat(o.material)) {
-      if (!m || vistos.has(m.uuid)) continue;
-      const col = m.color ?? new THREE.Color(1, 1, 1);
-      const rojo = col.r > 0.14 && col.r > col.g * 2.2 && col.r > col.b * 2.2;
-      if (!rojo && !NOMBRE_PILOTO.test(m.name ?? '') && !NOMBRE_PILOTO.test(o.name)) continue;
-      vistos.add(m.uuid);
-      out.push({ material: m, malla: o });
+      if (!m) continue;
+      const u = usos.get(m) ?? { material: m, atras: true, pequeno: true, nombre: false };
+      u.atras &&= atras;
+      u.pequeno &&= pequeno;
+      u.nombre ||= NOMBRE_PILOTO.test(m.name ?? '') || NOMBRE_PILOTO.test(o.name);
+      usos.set(m, u);
     }
   });
+  const out = [];
+  for (const u of usos.values()) {
+    if (!u.atras || !u.pequeno) continue;
+    const col = u.material.color ?? new THREE.Color(1, 1, 1);
+    const rojo = col.r > 0.14 && col.r > col.g * 2.2 && col.r > col.b * 2.2;
+    if (rojo || u.nombre) out.push({ material: u.material });
+  }
   return out;
 }
 

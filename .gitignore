@@ -25,3 +25,10 @@ DerivedDataCache/
 # Voces del narrador: mientras sean de borrador (edge-tts) no van al
 # repositorio. Las de Azure (npm run voces) si: se quita esta linea.
 public/voz/
+
+# Carros de Sketchfab (scripts/preparar-carro.mjs): originales, zips, lo que
+# se descomprime y el manifiesto, que depende de lo que haya en ESTE equipo.
+modelos/*.zip
+modelos/*/
+public/models/carros.json
+.env.modelos

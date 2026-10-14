@@ -7,9 +7,12 @@
      - Paginas (navegacion): red primero, con la copia guardada de respaldo.
        Asi una version nueva entra en cuanto hay red.
      - Codigo, modelos, fuentes e imagenes: cache primero. Los .js llevan
-       hash en el nombre, asi que nunca se sirve uno viejo con nombre nuevo. */
+       hash en el nombre, asi que nunca se sirve uno viejo con nombre nuevo.
+     - models/carros.json (que carros hay): red primero, como las paginas.
+       Si se quedara en cache, un carro publicado despues nunca saldria en el
+       menu de quien ya tiene la app instalada. */
 
-const VERSION = 'jero-v9';
+const VERSION = 'jero-v10';
 const BASICOS = ['./', './index.html', './manifest.webmanifest', './icono-192.png', './icono-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -34,6 +37,15 @@ self.addEventListener('fetch', (e) => {
       fetch(req)
         .then(r => { const copia = r.clone(); caches.open(VERSION).then(c => c.put('./index.html', copia)); return r; })
         .catch(() => caches.match('./index.html').then(r => r || caches.match('./'))),
+    );
+    return;
+  }
+
+  if (url.pathname.endsWith('/models/carros.json')) {
+    e.respondWith(
+      fetch(req)
+        .then(r => { if (r.ok) { const copia = r.clone(); caches.open(VERSION).then(c => c.put(req, copia)); } return r; })
+        .catch(() => caches.match(req).then(r => r || Response.error())),
     );
     return;
   }

@@ -197,6 +197,8 @@ export class Vehicle {
     }
 
     const c = this.controller;
+    // Cada carro puede traer su reparto de agarre (ver vehicle/carros.js).
+    const agarre = this.opts.agarre ?? {};
     for (let i = 0; i < 4; i++) {
       const rear = i >= RL;
       // MEDIDO, no copiado: la rigidez de Rapier va escalada por la masa del
@@ -216,7 +218,7 @@ export class Vehicle {
       // Asimetria deliberada, igual que HRVehicleWheels.cpp (1400 delante /
       // 1150 detras): el tren trasero agarra MENOS. Sin esto el coche subvira
       // siempre y no existe el sobreviraje al levantar el pie — ni el drift.
-      c.setWheelFrictionSlip(i, rear ? 1.55 : 1.95);
+      c.setWheelFrictionSlip(i, rear ? agarre.detras ?? 1.55 : agarre.delante ?? 1.95);
       c.setWheelSideFrictionStiffness(i, rear ? 0.72 : 1.0);
     }
   }

@@ -20,7 +20,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { SteeringModel, PedalModel } from './vehicle/steering.js';
 import { Powertrain } from './vehicle/powertrain.js';
 import { Vehicle } from './vehicle/vehicle.js';
-import { cargarCarro, CARROS, fichaCarro, PINTURAS, CARRO_POR_DEFECTO } from './vehicle/catalogo.js';
+import { cargarCarro, descubrirCarros, CARROS, fichaCarro, PINTURAS } from './vehicle/catalogo.js';
 import { buildRoundabout, buildLighting, GEO } from './world/roundabout.js';
 import {
   CiudadFotorrealista, construirCalzadaOSM, radioEjeOSM,
@@ -128,7 +128,7 @@ const PREFS_CLAVE = 'jr.prefs';
 const prefs = (() => {
   const base = {
     sonido: true, voz: true, direccion: 'inclinar', camara: 'persecucion',
-    carro: CARRO_POR_DEFECTO, pintura: 0, apodo: '',
+    carro: '', pintura: 0, apodo: '',   // '' = el primero del catalogo
   };
   try { return { ...base, ...JSON.parse(localStorage.getItem(PREFS_CLAVE) ?? '{}') }; } catch { return base; }
 })();
@@ -255,6 +255,11 @@ async function main() {
     spawn = SPAWN.clone();
   }
 
+  // Los carros de Sketchfab solo existen si esta compilacion los trae. Un
+  // carro guardado que ya no esta (o ninguno) pasa al primero del catalogo.
+  const creditos = await descubrirCarros();
+  if (creditos.length) $('#mCreditosCarros').textContent = ' · ' + creditos.join(' · ');
+  if (!CARROS.some(c => c.id === prefs.carro)) prefs.carro = CARROS[0].id;
   carro = await cargarCarro(prefs.carro, CAL, boot);
   // El CarConcept llega con texturas sin afinar; el FURIA no tiene ninguna.
   const afinadas = carro.afinar?.(renderer.capabilities.getMaxAnisotropy()) ?? 0;
